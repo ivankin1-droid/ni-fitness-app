@@ -1,3 +1,4 @@
+/* NI FITNESS v5.2 PATCH */
 const D=window.NI_DATA,$=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const S=JSON.parse(localStorage.getItem('ni_state_v5')||localStorage.getItem('ni_state_v4')||'{}');S.kcal=S.kcal||1500;S.water=Number.isFinite(S.water)?S.water:1.25;S.done=S.done||{};S.portions=S.portions||{};S.replacements=S.replacements||{};S.measurements=S.measurements||[];S.photos=S.photos||[];S.profile=S.profile||{name:'',goal:'Снижение веса',height:'',weight:'',waterGoal:2};S.assignedKcal=S.assignedKcal||S.kcal||1500;S.kcal=S.assignedKcal;S.monthlyReviews=S.monthlyReviews||[];S.subscription=S.subscription||{active:true,tier:'NI FITNESS'};const save=()=>localStorage.setItem('ni_state_v5',JSON.stringify(S));
 const today=()=>new Date().toISOString().slice(0,10);const plan=()=>JSON.parse(JSON.stringify(D.plans[String(S.kcal)]||D.plans['1500']));const mkey=i=>`${today()}_${S.kcal}_${i}`;
@@ -18,14 +19,22 @@ function renderHistory(){$('#measurementHistory').innerHTML=S.measurements.lengt
 function handlePhoto(input){input.onchange=e=>{let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{let img=new Image();img.onload=()=>{let c=document.createElement('canvas'),max=900,scale=Math.min(1,max/img.width);c.width=img.width*scale;c.height=img.height*scale;c.getContext('2d').drawImage(img,0,0,c.width,c.height);S.photos.push({date:new Date().toISOString(),data:c.toDataURL('image/jpeg',.72)});if(S.photos.length>15)S.photos.shift();save();renderPhotos()};img.src=r.result};r.readAsDataURL(f);e.target.value=''}}handlePhoto($('#photoGallery'));handlePhoto($('#photoCamera'));function renderPhotos(){$('#photoGrid').innerHTML=S.photos.slice().reverse().slice(0,12).map(x=>`<img src="${x.data}" title="${x.date}">`).join('')}
 function renderProfile(){let p=S.profile;$('#profileName').value=p.name||'';$('#profileGoal').value=p.goal||'Снижение веса';$('#profileHeight').value=p.height||'';$('#profileWeight').value=p.weight||'';$('#profileWater').value=p.waterGoal||2}$('#saveProfile').onclick=()=>{S.profile={name:$('#profileName').value.trim(),goal:$('#profileGoal').value,height:$('#profileHeight').value,weight:$('#profileWeight').value,waterGoal:+$('#profileWater').value||2};save();renderWater();go('home')};
 $('#resetToday').onclick=()=>{let d=today();Object.keys(S.done).filter(k=>k.startsWith(d)).forEach(k=>delete S.done[k]);Object.keys(S.portions).filter(k=>k.startsWith(d)).forEach(k=>delete S.portions[k]);Object.keys(S.replacements).filter(k=>k.startsWith(d)).forEach(k=>delete S.replacements[k]);S.water=0;save();renderAll();go('home')};$('#exportData').onclick=()=>{let blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='ni-fitness-data.json';a.click();URL.revokeObjectURL(a.href)};
-function renderAll(){renderReview();renderSubscription();$('#kcalSelect').value=$('#kcalSelect2').value=S.kcal;$('#heroKcal').textContent=S.kcal;$('#planTitle').textContent=S.kcal+' ккал';$('#nutritionKcal').textContent=S.kcal;renderMeals();shopping();renderWater();renderExercises();renderMaterials();renderHistory();renderPhotos();renderProfile()}try{if(window.Telegram?.WebApp){Telegram.WebApp.ready();Telegram.WebApp.expand()}}catch(e){}
-// v5.1: bundled guides always open from THIS Vercel project, never from editor/source links.
-$$('.guide-open').forEach(b=>b.onclick=()=>{
-  const url=new URL(b.dataset.guide, location.origin + location.pathname.replace(/[^/]*$/, '')).href;
-  // Same-origin PDF. On iOS/Telegram it opens the browser/PDF viewer directly.
-  if(window.Telegram?.WebApp?.openLink){ Telegram.WebApp.openLink(url); }
-  else { window.open(url,'_blank','noopener'); }
-});
+function renderAll(){
+  renderReview();
+  renderSubscription();
+  const hero=$('#heroKcal'), title=$('#planTitle'), nk=$('#nutritionKcal');
+  if(hero) hero.textContent=S.kcal;
+  if(title) title.textContent=S.kcal+' ккал';
+  if(nk) nk.textContent=S.kcal;
+  renderMeals();
+  shopping();
+  renderWater();
+  renderExercises();
+  renderMaterials();
+  renderHistory();
+  renderPhotos();
+  renderProfile();
+}try{if(window.Telegram?.WebApp){Telegram.WebApp.ready();Telegram.WebApp.expand()}}catch(e){}
 
 const ARTICLES={
  protein:{kicker:'ПИТАНИЕ · ДОБАВКИ',title:'Протеин и добавки',body:`
@@ -49,6 +58,33 @@ $$('.article-open').forEach(b=>b.onclick=()=>{
  $('#articleModal').classList.add('open');
 });
 
+
+// v5.2: ONE guide handler only. PDFs are always loaded from the root of this Vercel app.
+const GUIDE_FILES={
+  './nutrition-guide.pdf':'/nutrition-guide.pdf',
+  './product-guide.pdf':'/product-guide.pdf'
+};
+$$('.guide-open').forEach(b=>{
+  b.onclick=()=>{
+    const path=GUIDE_FILES[b.dataset.guide] || b.dataset.guide;
+    const url=new URL(path, location.origin).href;
+    // Hard stop against accidental editor/source links.
+    if(!url.startsWith(location.origin)){
+      alert('Не удалось открыть материал.');
+      return;
+    }
+    try{
+      if(window.Telegram?.WebApp?.openLink){
+        Telegram.WebApp.openLink(url);
+      }else{
+        window.open(url,'_blank','noopener,noreferrer');
+      }
+    }catch(e){
+      window.location.assign(url);
+    }
+  };
+});
+
 function renderSubscription(){
  const active=S.subscription?.active!==false;
  const card=document.querySelector('.subscription-card');
@@ -56,28 +92,54 @@ function renderSubscription(){
    card.querySelector('h2').textContent=active?'NI FITNESS · ACTIVE':'NI FITNESS · PAUSED';
    card.querySelector('.status-pill').textContent=active?'Активна':'Нет доступа';
  }
- // In the current prototype we do not hard-block screens yet: this lets the owner test all functions.
+ // Тестовый режим меняет статус и назначенный план только на этом устройстве. Реальный клиентский доступ подключим через сервер.
 }
 function initTestPanel(){
- const params=new URLSearchParams(location.search);
- const panel=$('#trainerTestPanel');
- if(!panel || params.get('test')!=='1') return;
- panel.style.display='block';
- const sel=$('#testAssignedKcal');
- sel.innerHTML=Object.keys(D.plans).map(k=>`<option value="${k}">${k} ккал</option>`).join('');
- sel.value=String(S.assignedKcal||1500);
- $('#testSubActive').checked=S.subscription?.active!==false;
- $('#applyTestAccess').onclick=()=>{
-   S.assignedKcal=+sel.value; S.kcal=S.assignedKcal;
-   S.subscription=S.subscription||{}; S.subscription.active=$('#testSubActive').checked;
-   save(); renderAll(); renderSubscription();
-   alert('Тестовый доступ обновлён');
- };
+  const params=new URLSearchParams(location.search);
+  const panel=$('#trainerTestPanel');
+  if(!panel || params.get('test')!=='1') return;
+
+  panel.style.display='block';
+
+  const sel=$('#testAssignedKcal');
+  const checkbox=$('#testSubActive');
+  const btn=$('#applyTestAccess');
+  const status=$('#testAccessStatus');
+
+  sel.innerHTML=Object.keys(D.plans)
+    .map(k=>`<option value="${k}">${k} ккал</option>`).join('');
+  sel.value=String(S.assignedKcal||1500);
+  checkbox.checked=S.subscription?.active!==false;
+
+  const showStatus=()=>{
+    if(!status) return;
+    status.innerHTML=`<div class="status-box"><b>Тестовый клиент</b><small>План: ${S.assignedKcal} ккал · доступ: ${S.subscription?.active!==false?'активен':'отключён'}</small></div>`;
+  };
+  showStatus();
+
+  btn.onclick=()=>{
+    const kcal=Number(sel.value);
+    if(!D.plans[String(kcal)]){
+      alert('Не удалось выбрать этот план.');
+      return;
+    }
+
+    S.assignedKcal=kcal;
+    S.kcal=kcal;
+    S.subscription=S.subscription||{};
+    S.subscription.active=checkbox.checked;
+    save();
+
+    renderAll();
+    showStatus();
+
+    btn.textContent='✓ Доступ назначен';
+    setTimeout(()=>btn.textContent='Применить тестовый доступ',1400);
+  };
 }
 initTestPanel();
 renderSubscription();
 
-$$('.guide-open').forEach(b=>b.onclick=()=>{const file=b.dataset.guide; const candidates=['assets/guides/'+file,file]; const url=candidates[0]; if(window.Telegram&&Telegram.WebApp&&Telegram.WebApp.openLink){Telegram.WebApp.openLink(new URL(url,location.href).href)}else{location.href=url}});
 function renderReview(){const el=$('#reviewStatus');if(!el)return;const last=S.monthlyReviews[S.monthlyReviews.length-1];if(!last){el.innerHTML='<span class="muted">Отчёт за этот месяц ещё не отправлен.</span>';return}el.innerHTML=`<div class="status-box"><b>Отчёт отправлен</b><small>${new Date(last.date).toLocaleDateString('ru-RU')} · статус: ${last.status}</small></div>`}
 $('#sendReview').onclick=()=>{const now=new Date(),last=S.monthlyReviews[S.monthlyReviews.length-1];if(last&&new Date(last.date).getMonth()===now.getMonth()&&new Date(last.date).getFullYear()===now.getFullYear()){alert('Отчёт за этот месяц уже отправлен. Следующий будет доступен в новом месяце.');return}const measurement=S.measurements[S.measurements.length-1]||null;S.monthlyReviews.push({date:now.toISOString(),win:$('#reviewWin').value.trim(),hard:$('#reviewHard').value.trim(),next:$('#reviewNext').value.trim(),measurement,status:'на проверке'});save();$('#reviewWin').value='';$('#reviewHard').value='';$('#reviewNext').value='';renderReview();alert('Отчёт сохранён. После подключения серверной части он будет автоматически приходить тренеру.')};
 renderAll();
