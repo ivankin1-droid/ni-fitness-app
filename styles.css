@@ -11,3 +11,17 @@ main{padding:0 16px}.page{display:none;padding-top:16px}.page.active{display:blo
 
 .test-panel{border-color:#42424a}.switch-row{display:flex;align-items:center;justify-content:space-between;margin:12px 0}.switch-row input{width:auto;transform:scale(1.2)}
 .article-body{margin-top:16px}.article-body p{color:#b0b0b7;line-height:1.6;font-size:14px}.article-body h4{margin:20px 0 7px;font-size:15px}
+
+/* v6 access / admin */
+.access-lock{position:fixed;inset:0;z-index:999;background:rgba(7,7,9,.96);backdrop-filter:blur(18px);align-items:center;justify-content:center;padding:24px}
+.access-lock-card{width:min(430px,100%);border:1px solid #2f2f35;background:#151518;border-radius:28px;padding:28px;text-align:center}
+.big-logo{width:68px;height:68px;margin:0 auto 18px;font-size:22px}
+.access-lock-card h2{font-size:28px;margin:12px 0}.access-lock-card p{color:#96969f;line-height:1.55}
+.lock-id{margin:20px 0;padding:12px;background:#202024;border-radius:12px;color:#8e8e96;font-size:12px}
+.lock-contact{display:block;text-decoration:none}
+.server-card .ok{background:#ebeee8;color:#111}
+.trainer-feedback{margin-top:10px;padding:13px;border:1px solid #36363d;border-radius:14px;background:#202024}.trainer-feedback p{margin:7px 0 0;color:#bbb;line-height:1.5}
+
+.admin-app{max-width:760px;margin:auto;min-height:100vh}.admin-main{padding:0 16px 50px}.admin-tools{margin-bottom:14px}
+.admin-list{display:grid;gap:9px}.admin-client{width:100%;display:flex;justify-content:space-between;align-items:center;text-align:left;background:#151518;border:1px solid #29292f;color:#eee;border-radius:17px;padding:14px}
+.admin-client b{display:block}.admin-client small{display:block;color:#818189;margin-top:5px}.admin-client-meta{text-align:right;display:grid;gap:4px;font-size:11px}.good{color:#dce7d7}.bad{color:#c58f8f}

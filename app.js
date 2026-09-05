@@ -1,4 +1,4 @@
-/* NI FITNESS v5.3 IMAGE FIX */
+/* NI FITNESS v6.1 MANUAL DB */
 /* NI FITNESS v5.2 PATCH */
 const D=window.NI_DATA,$=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const S=JSON.parse(localStorage.getItem('ni_state_v5')||localStorage.getItem('ni_state_v4')||'{}');S.kcal=S.kcal||1500;S.water=Number.isFinite(S.water)?S.water:1.25;S.done=S.done||{};S.portions=S.portions||{};S.replacements=S.replacements||{};S.measurements=S.measurements||[];S.photos=S.photos||[];S.profile=S.profile||{name:'',goal:'Снижение веса',height:'',weight:'',waterGoal:2};S.assignedKcal=S.assignedKcal||S.kcal||1500;S.kcal=S.assignedKcal;S.monthlyReviews=S.monthlyReviews||[];S.subscription=S.subscription||{active:true,tier:'NI FITNESS'};const save=()=>localStorage.setItem('ni_state_v5',JSON.stringify(S));
@@ -150,61 +150,165 @@ $$('.guide-open').forEach(b=>{
   };
 });
 
+
+
+renderSubscription();
+
+function renderReview(){const el=$('#reviewStatus');if(!el)return;const last=S.monthlyReviews[S.monthlyReviews.length-1];if(!last){el.innerHTML='<span class="muted">Отчёт за этот месяц ещё не отправлен.</span>';return}el.innerHTML=`<div class="status-box"><b>Отчёт отправлен</b><small>${new Date(last.date).toLocaleDateString('ru-RU')} · статус: ${last.status}</small></div>`}
+renderAll();
+
+
+/* ===== NI FITNESS v6 · SERVER ACCESS ===== */
+S.server = S.server || {ready:false, role:'client', telegramId:null, remote:false};
+let SERVER_PROFILE = null;
+
+function telegramInitData(){
+  try{return window.Telegram?.WebApp?.initData || ''}catch(e){return ''}
+}
+async function apiPost(path, body={}){
+  const r=await fetch(path,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({initData:telegramInitData(),...body})
+  });
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(j.error||'Ошибка сервера');
+  return j;
+}
+function setServerStatus(text, ok=false){
+  const el=$('#serverStatusText'), pill=$('#serverStatusPill');
+  if(el) el.textContent=text;
+  if(pill){pill.textContent=ok?'ONLINE':'CHECK';pill.classList.toggle('ok',ok)}
+}
+function showAccessLock(profile, reason){
+  const lock=$('#accessLock');
+  if(!lock)return;
+  const id=profile?.telegram_id || S.server.telegramId || '—';
+  $('#lockTelegramId').textContent=id;
+  $('#accessLockTitle').textContent='Доступ не активирован';
+  $('#accessLockText').textContent=reason||'Подписка не активна. Обратитесь к тренеру для подключения.';
+  lock.style.display='flex';
+}
+function hideAccessLock(){
+  const lock=$('#accessLock'); if(lock) lock.style.display='none';
+}
+function subscriptionIsActive(profile){
+  if(!profile?.subscription_active) return false;
+  if(!profile.subscription_until) return true;
+  return new Date(profile.subscription_until).getTime() > Date.now();
+}
+function applyServerProfile(profile){
+  SERVER_PROFILE=profile;
+  S.server={ready:true,role:profile.role||'client',telegramId:profile.telegram_id,remote:true};
+  S.assignedKcal=Number(profile.assigned_kcal||1500);
+  S.kcal=S.assignedKcal;
+  S.subscription=S.subscription||{};
+  S.subscription.active=subscriptionIsActive(profile);
+  S.subscription.until=profile.subscription_until||null;
+  S.profile=S.profile||{};
+  if(profile.first_name && !S.profile.name) S.profile.name=profile.first_name;
+  save();
+
+  const idEl=$('#serverTelegramId');
+  if(idEl) idEl.textContent=String(profile.telegram_id);
+  setServerStatus('Доступ проверен по Telegram. Данные назначения загружены с сервера.',true);
+
+  const adminBtn=$('#openAdminBtn');
+  if(adminBtn && profile.role==='admin'){
+    adminBtn.style.display='block';
+    adminBtn.onclick=()=>location.href='/admin.html';
+  }
+
+  if(S.subscription.active || profile.role==='admin') hideAccessLock();
+  else showAccessLock(profile,'Подписка сейчас не активна. После активации тренером приложение откроется автоматически.');
+
+  renderAll();
+}
+async function loadServerSession(){
+  const initData=telegramInitData();
+
+  // Для обычного браузера не притворяемся авторизованным клиентом.
+  if(!initData){
+    S.server={ready:true,role:'browser',telegramId:null,remote:false};
+    setServerStatus('Откройте приложение внутри Telegram, чтобы проверить реальный доступ.',false);
+    const idEl=$('#serverTelegramId'); if(idEl) idEl.textContent='только в Telegram';
+    // В браузере владельцу оставляем интерфейс видимым для проверки дизайна.
+    hideAccessLock();
+    return;
+  }
+
+  try{
+    const result=await apiPost('/api/session',{});
+    applyServerProfile(result.profile);
+  }catch(e){
+    setServerStatus(e.message||'Не удалось проверить доступ',false);
+    showAccessLock(null,'Не удалось подтвердить доступ. Закройте Mini App и откройте его из Telegram ещё раз.');
+  }
+}
+
 function renderSubscription(){
  const active=S.subscription?.active!==false;
  const card=document.querySelector('.subscription-card');
  if(card){
-   card.querySelector('h2').textContent=active?'NI FITNESS · ACTIVE':'NI FITNESS · PAUSED';
-   card.querySelector('.status-pill').textContent=active?'Активна':'Нет доступа';
+   const h=card.querySelector('h2'), p=card.querySelector('.status-pill'), small=card.querySelector('small');
+   if(h) h.textContent=active?'NI FITNESS · ACTIVE':'NI FITNESS · PAUSED';
+   if(p) p.textContent=active?'Активна':'Нет доступа';
+   if(small){
+     if(S.subscription?.until){
+       small.textContent='Доступ до '+new Date(S.subscription.until).toLocaleDateString('ru-RU');
+     }else small.textContent=active?'Персональный план и материалы':'Доступ приостановлен';
+   }
  }
- // Тестовый режим меняет статус и назначенный план только на этом устройстве. Реальный клиентский доступ подключим через сервер.
 }
-function initTestPanel(){
-  const params=new URLSearchParams(location.search);
-  const panel=$('#trainerTestPanel');
-  if(!panel || params.get('test')!=='1') return;
 
-  panel.style.display='block';
+function renderReview(){
+ const el=$('#reviewStatus'); if(!el)return;
+ const last=S.monthlyReviews[S.monthlyReviews.length-1];
+ if(!last){el.innerHTML='<span class="muted">Отчёт за этот месяц ещё не отправлен.</span>';return}
+ let feedback=last.trainer_feedback?`<div class="trainer-feedback"><b>Ответ Никиты</b><p>${last.trainer_feedback}</p></div>`:'';
+ el.innerHTML=`<div class="status-box"><b>Отчёт отправлен</b><small>${new Date(last.date).toLocaleDateString('ru-RU')} · статус: ${last.status}</small></div>${feedback}`;
+}
 
-  const sel=$('#testAssignedKcal');
-  const checkbox=$('#testSubActive');
-  const btn=$('#applyTestAccess');
-  const status=$('#testAccessStatus');
-
-  sel.innerHTML=Object.keys(D.plans)
-    .map(k=>`<option value="${k}">${k} ккал</option>`).join('');
-  sel.value=String(S.assignedKcal||1500);
-  checkbox.checked=S.subscription?.active!==false;
-
-  const showStatus=()=>{
-    if(!status) return;
-    status.innerHTML=`<div class="status-box"><b>Тестовый клиент</b><small>План: ${S.assignedKcal} ккал · доступ: ${S.subscription?.active!==false?'активен':'отключён'}</small></div>`;
-  };
-  showStatus();
-
-  btn.onclick=()=>{
-    const kcal=Number(sel.value);
-    if(!D.plans[String(kcal)]){
-      alert('Не удалось выбрать этот план.');
-      return;
+const sendReviewBtn=$('#sendReview');
+if(sendReviewBtn) sendReviewBtn.onclick=async()=>{
+  const win=$('#reviewWin').value.trim(), hard=$('#reviewHard').value.trim(), next=$('#reviewNext').value.trim();
+  if(!win && !hard && !next){alert('Добавьте хотя бы один итог месяца.');return}
+  sendReviewBtn.disabled=true; sendReviewBtn.textContent='Отправляем…';
+  try{
+    if(S.server?.remote){
+      const latestMeasurement=S.measurements[S.measurements.length-1]||null;
+      const result=await apiPost('/api/monthly-review',{action:'submit',win,hard,next,measurement:latestMeasurement});
+      const r=result.review;
+      const local={date:r.created_at,win:r.win,hard:r.hard,next:r.next,status:r.status,trainer_feedback:r.trainer_feedback||''};
+      const idx=S.monthlyReviews.findIndex(x=>x.id===r.id);
+      if(idx>=0)S.monthlyReviews[idx]=local; else S.monthlyReviews.push({...local,id:r.id});
+    }else{
+      S.monthlyReviews.push({date:new Date().toISOString(),win,hard,next,status:'локально — сервер не подключён'});
     }
-
-    S.assignedKcal=kcal;
-    S.kcal=kcal;
-    S.subscription=S.subscription||{};
-    S.subscription.active=checkbox.checked;
     save();
+    $('#reviewWin').value='';$('#reviewHard').value='';$('#reviewNext').value='';
+    renderReview();
+    alert(S.server?.remote?'Отчёт отправлен Никите.':'Отчёт сохранён только на этом устройстве.');
+  }catch(e){
+    alert(e.message||'Не удалось отправить отчёт');
+  }finally{
+    sendReviewBtn.disabled=false;sendReviewBtn.textContent='Отправить отчёт тренеру';
+  }
+};
 
-    renderAll();
-    showStatus();
-
-    btn.textContent='✓ Доступ назначен';
-    setTimeout(()=>btn.textContent='Применить тестовый доступ',1400);
-  };
+async function loadRemoteReviews(){
+ if(!S.server?.remote)return;
+ try{
+   const result=await apiPost('/api/monthly-review',{action:'mine'});
+   if(Array.isArray(result.reviews)){
+     S.monthlyReviews=result.reviews.map(r=>({
+       id:r.id,date:r.created_at,win:r.win,hard:r.hard,next:r.next,status:r.status,
+       trainer_feedback:r.trainer_feedback||''
+     }));
+     save();renderReview();
+   }
+ }catch(e){}
 }
-initTestPanel();
-renderSubscription();
 
-function renderReview(){const el=$('#reviewStatus');if(!el)return;const last=S.monthlyReviews[S.monthlyReviews.length-1];if(!last){el.innerHTML='<span class="muted">Отчёт за этот месяц ещё не отправлен.</span>';return}el.innerHTML=`<div class="status-box"><b>Отчёт отправлен</b><small>${new Date(last.date).toLocaleDateString('ru-RU')} · статус: ${last.status}</small></div>`}
-$('#sendReview').onclick=()=>{const now=new Date(),last=S.monthlyReviews[S.monthlyReviews.length-1];if(last&&new Date(last.date).getMonth()===now.getMonth()&&new Date(last.date).getFullYear()===now.getFullYear()){alert('Отчёт за этот месяц уже отправлен. Следующий будет доступен в новом месяце.');return}const measurement=S.measurements[S.measurements.length-1]||null;S.monthlyReviews.push({date:now.toISOString(),win:$('#reviewWin').value.trim(),hard:$('#reviewHard').value.trim(),next:$('#reviewNext').value.trim(),measurement,status:'на проверке'});save();$('#reviewWin').value='';$('#reviewHard').value='';$('#reviewNext').value='';renderReview();alert('Отчёт сохранён. После подключения серверной части он будет автоматически приходить тренеру.')};
-renderAll();
+loadServerSession().then(loadRemoteReviews);
+
