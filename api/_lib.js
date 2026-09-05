@@ -3,7 +3,19 @@ const crypto = require('crypto');
 function env(name) {
   const value = process.env[name];
   if (!value) throw new Error(`Missing environment variable: ${name}`);
-  return value;
+  return value.trim();
+}
+
+function supabaseBaseUrl() {
+  let url = env('SUPABASE_URL').replace(/\/+$/, '');
+  // Allows either https://xxx.supabase.co or a copied Data API URL ending in /rest/v1
+  url = url.replace(/\/rest\/v1\/?$/i, '');
+  return url;
+}
+
+function supabaseKey() {
+  // Accept the name used in our Vercel setup, plus a fallback alias.
+  return (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || '').trim();
 }
 
 function verifyTelegramInitData(initData) {
@@ -18,7 +30,7 @@ function verifyTelegramInitData(initData) {
   const authDate = Number(params.get('auth_date') || 0);
   const now = Math.floor(Date.now() / 1000);
   if (!authDate || Math.abs(now - authDate) > 86400) {
-    throw new Error('Telegram-сессия устарела. Закройте Mini App и откройте заново.');
+    throw new Error('Telegram-сессия устарела. Откройте Mini App заново.');
   }
 
   const dataCheckString = [...params.entries()]
@@ -40,26 +52,26 @@ function verifyTelegramInitData(initData) {
   const b = Buffer.from(hash, 'hex');
 
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
-    throw new Error('Не удалось подтвердить Telegram-пользователя.');
+    throw new Error('Telegram initData не прошёл проверку подписи. Проверьте токен именно этого бота.');
   }
 
   const rawUser = params.get('user');
   if (!rawUser) throw new Error('Telegram user отсутствует.');
-
   return JSON.parse(rawUser);
 }
 
 async function sb(path, { method = 'GET', body, prefer } = {}) {
-  const base = env('SUPABASE_URL').replace(/\/$/, '');
-  const key = env('SUPABASE_SERVICE_ROLE_KEY');
+  const key = supabaseKey();
+  if (!key) throw new Error('Missing environment variable: SUPABASE_SERVICE_ROLE_KEY');
 
+  const url = `${supabaseBaseUrl()}/rest/v1/${path}`;
   const headers = {
     apikey: key,
     'Content-Type': 'application/json'
   };
   if (prefer) headers.Prefer = prefer;
 
-  const response = await fetch(`${base}/rest/v1/${path}`, {
+  const response = await fetch(url, {
     method,
     headers,
     body: body === undefined ? undefined : JSON.stringify(body)
@@ -73,11 +85,11 @@ async function sb(path, { method = 'GET', body, prefer } = {}) {
   }
 
   if (!response.ok) {
-    const message =
+    let details =
       typeof data === 'object' && data
-        ? (data.message || data.hint || JSON.stringify(data))
-        : String(data || `Supabase error ${response.status}`);
-    throw new Error(message);
+        ? (data.message || data.hint || data.code || JSON.stringify(data))
+        : String(data || '');
+    throw new Error(`Supabase ${response.status}: ${details || 'request failed'}`);
   }
 
   return data;
@@ -109,7 +121,7 @@ async function getOrCreateProfile(user) {
   });
 
   if (!Array.isArray(created) || !created[0]) {
-    throw new Error('Не удалось создать профиль клиента.');
+    throw new Error('Supabase не вернул созданный профиль.');
   }
   return created[0];
 }
@@ -140,10 +152,4 @@ function json(res, status, payload) {
   res.status(status).json(payload);
 }
 
-module.exports = {
-  sb,
-  requireSession,
-  subscriptionActive,
-  requireAdmin,
-  json
-};
+module.exports = { sb, requireSession, subscriptionActive, requireAdmin, json };
