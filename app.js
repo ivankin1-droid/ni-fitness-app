@@ -18,8 +18,65 @@ function renderHistory(){$('#measurementHistory').innerHTML=S.measurements.lengt
 function handlePhoto(input){input.onchange=e=>{let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{let img=new Image();img.onload=()=>{let c=document.createElement('canvas'),max=900,scale=Math.min(1,max/img.width);c.width=img.width*scale;c.height=img.height*scale;c.getContext('2d').drawImage(img,0,0,c.width,c.height);S.photos.push({date:new Date().toISOString(),data:c.toDataURL('image/jpeg',.72)});if(S.photos.length>15)S.photos.shift();save();renderPhotos()};img.src=r.result};r.readAsDataURL(f);e.target.value=''}}handlePhoto($('#photoGallery'));handlePhoto($('#photoCamera'));function renderPhotos(){$('#photoGrid').innerHTML=S.photos.slice().reverse().slice(0,12).map(x=>`<img src="${x.data}" title="${x.date}">`).join('')}
 function renderProfile(){let p=S.profile;$('#profileName').value=p.name||'';$('#profileGoal').value=p.goal||'Снижение веса';$('#profileHeight').value=p.height||'';$('#profileWeight').value=p.weight||'';$('#profileWater').value=p.waterGoal||2}$('#saveProfile').onclick=()=>{S.profile={name:$('#profileName').value.trim(),goal:$('#profileGoal').value,height:$('#profileHeight').value,weight:$('#profileWeight').value,waterGoal:+$('#profileWater').value||2};save();renderWater();go('home')};
 $('#resetToday').onclick=()=>{let d=today();Object.keys(S.done).filter(k=>k.startsWith(d)).forEach(k=>delete S.done[k]);Object.keys(S.portions).filter(k=>k.startsWith(d)).forEach(k=>delete S.portions[k]);Object.keys(S.replacements).filter(k=>k.startsWith(d)).forEach(k=>delete S.replacements[k]);S.water=0;save();renderAll();go('home')};$('#exportData').onclick=()=>{let blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='ni-fitness-data.json';a.click();URL.revokeObjectURL(a.href)};
-function renderAll(){renderReview();$('#kcalSelect').value=$('#kcalSelect2').value=S.kcal;$('#heroKcal').textContent=S.kcal;$('#planTitle').textContent=S.kcal+' ккал';$('#nutritionKcal').textContent=S.kcal;renderMeals();shopping();renderWater();renderExercises();renderMaterials();renderHistory();renderPhotos();renderProfile()}try{if(window.Telegram?.WebApp){Telegram.WebApp.ready();Telegram.WebApp.expand()}}catch(e){}
-// v5: open bundled guides inside Telegram/browser without editor links.
+function renderAll(){renderReview();renderSubscription();$('#kcalSelect').value=$('#kcalSelect2').value=S.kcal;$('#heroKcal').textContent=S.kcal;$('#planTitle').textContent=S.kcal+' ккал';$('#nutritionKcal').textContent=S.kcal;renderMeals();shopping();renderWater();renderExercises();renderMaterials();renderHistory();renderPhotos();renderProfile()}try{if(window.Telegram?.WebApp){Telegram.WebApp.ready();Telegram.WebApp.expand()}}catch(e){}
+// v5.1: bundled guides always open from THIS Vercel project, never from editor/source links.
+$$('.guide-open').forEach(b=>b.onclick=()=>{
+  const url=new URL(b.dataset.guide, location.origin + location.pathname.replace(/[^/]*$/, '')).href;
+  // Same-origin PDF. On iOS/Telegram it opens the browser/PDF viewer directly.
+  if(window.Telegram?.WebApp?.openLink){ Telegram.WebApp.openLink(url); }
+  else { window.open(url,'_blank','noopener'); }
+});
+
+const ARTICLES={
+ protein:{kicker:'ПИТАНИЕ · ДОБАВКИ',title:'Протеин и добавки',body:`
+ <p>Протеин — это удобный источник белка, а не отдельная «магическая» категория питания. Его имеет смысл использовать, когда обычной едой неудобно добрать белок.</p>
+ <h4>Что важнее протеина</h4><p>Регулярные приёмы пищи, достаточный белок за день, овощи и фрукты, нормальная калорийность и тренировки.</p>
+ <h4>BCAA</h4><p>Если белка в рационе достаточно, отдельные BCAA обычно не дают заметного преимущества для сохранения или роста мышц.</p>
+ <h4>Креатин</h4><p>Одна из наиболее изученных спортивных добавок для силовой работы и набора безжировой массы. Добавки не заменяют программу тренировок и питание.</p>`},
+ goals:{kicker:'ПИТАНИЕ · ЦЕЛЬ',title:'Снижение, поддержание, набор',body:`
+ <p><b>Снижение веса:</b> умеренный дефицит, белок в основных приёмах пищи, больше объёма за счёт овощей и контроль высококалорийных добавок.</p>
+ <p><b>Поддержание:</b> стабильная калорийность, разнообразие и корректировка порций по активности, голоду и динамике веса.</p>
+ <p><b>Набор мышц:</b> небольшой профицит, достаточный белок, углеводы вокруг тренировок и контроль темпа набора.</p>
+ <p>Во всех трёх целях регулярность, сон и силовые тренировки важнее отдельных «идеальных» продуктов.</p>`},
+ labels:{kicker:'ПРОДУКТЫ · ЭТИКЕТКА',title:'Как читать этикетку',body:`
+ <p>Сначала смотри размер порции и калорийность на 100 г. Потом — белок, жиры и углеводы. Состав помогает понять, из чего продукт сделан, но сам по себе длинный состав не делает продукт «плохим».</p>
+ <h4>Для белковой базы</h4><p>Сравнивай количество белка на 100 г и общую калорийность. Для соусов, масел, орехов и сыров особенно важно учитывать размер порции.</p>
+ <h4>Практическое правило</h4><p>Выбирай продукт не по одному слову на упаковке, а по тому, как он вписывается в твой конкретный рацион.</p>`}
+};
+$$('.article-open').forEach(b=>b.onclick=()=>{
+ const a=ARTICLES[b.dataset.article]; if(!a)return;
+ $('#articleDetail').innerHTML=`<span class="eyebrow">${a.kicker}</span><h2>${a.title}</h2><div class="article-body">${a.body}</div>`;
+ $('#articleModal').classList.add('open');
+});
+
+function renderSubscription(){
+ const active=S.subscription?.active!==false;
+ const card=document.querySelector('.subscription-card');
+ if(card){
+   card.querySelector('h2').textContent=active?'NI FITNESS · ACTIVE':'NI FITNESS · PAUSED';
+   card.querySelector('.status-pill').textContent=active?'Активна':'Нет доступа';
+ }
+ // In the current prototype we do not hard-block screens yet: this lets the owner test all functions.
+}
+function initTestPanel(){
+ const params=new URLSearchParams(location.search);
+ const panel=$('#trainerTestPanel');
+ if(!panel || params.get('test')!=='1') return;
+ panel.style.display='block';
+ const sel=$('#testAssignedKcal');
+ sel.innerHTML=Object.keys(D.plans).map(k=>`<option value="${k}">${k} ккал</option>`).join('');
+ sel.value=String(S.assignedKcal||1500);
+ $('#testSubActive').checked=S.subscription?.active!==false;
+ $('#applyTestAccess').onclick=()=>{
+   S.assignedKcal=+sel.value; S.kcal=S.assignedKcal;
+   S.subscription=S.subscription||{}; S.subscription.active=$('#testSubActive').checked;
+   save(); renderAll(); renderSubscription();
+   alert('Тестовый доступ обновлён');
+ };
+}
+initTestPanel();
+renderSubscription();
+
 $$('.guide-open').forEach(b=>b.onclick=()=>{const file=b.dataset.guide; const candidates=['assets/guides/'+file,file]; const url=candidates[0]; if(window.Telegram&&Telegram.WebApp&&Telegram.WebApp.openLink){Telegram.WebApp.openLink(new URL(url,location.href).href)}else{location.href=url}});
 function renderReview(){const el=$('#reviewStatus');if(!el)return;const last=S.monthlyReviews[S.monthlyReviews.length-1];if(!last){el.innerHTML='<span class="muted">Отчёт за этот месяц ещё не отправлен.</span>';return}el.innerHTML=`<div class="status-box"><b>Отчёт отправлен</b><small>${new Date(last.date).toLocaleDateString('ru-RU')} · статус: ${last.status}</small></div>`}
 $('#sendReview').onclick=()=>{const now=new Date(),last=S.monthlyReviews[S.monthlyReviews.length-1];if(last&&new Date(last.date).getMonth()===now.getMonth()&&new Date(last.date).getFullYear()===now.getFullYear()){alert('Отчёт за этот месяц уже отправлен. Следующий будет доступен в новом месяце.');return}const measurement=S.measurements[S.measurements.length-1]||null;S.monthlyReviews.push({date:now.toISOString(),win:$('#reviewWin').value.trim(),hard:$('#reviewHard').value.trim(),next:$('#reviewNext').value.trim(),measurement,status:'на проверке'});save();$('#reviewWin').value='';$('#reviewHard').value='';$('#reviewNext').value='';renderReview();alert('Отчёт сохранён. После подключения серверной части он будет автоматически приходить тренеру.')};
