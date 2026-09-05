@@ -29,8 +29,8 @@ function origin(req){
 
 function tbankPostJson(payload){
   return new Promise((resolve,reject)=>{
-    const certPath=path.join(__dirname,'HARICA-TLS-Root-2021-RSA.pem');
-    const harica=fs.readFileSync(certPath,'utf8');
+    const certPath=path.join(__dirname,'tbank-ca-bundle.pem');
+    const tbankBundle=fs.readFileSync(certPath,'utf8');
 
     const body=JSON.stringify(payload);
     const req=https.request({
@@ -43,7 +43,7 @@ function tbankPostJson(payload){
         'Content-Length':Buffer.byteLength(body)
       },
       // Сохраняем стандартные CA Node и дополнительно доверяем официальному HARICA root.
-      ca:[...tls.rootCertificates,harica],
+      ca:[...tls.rootCertificates,tbankBundle],
       rejectUnauthorized:true,
       servername:'securepay.tinkoff.ru'
     },res=>{
