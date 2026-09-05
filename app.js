@@ -102,11 +102,11 @@ async function niPhotoApi(payload){
 }
 function handlePhoto(input){input.onchange=e=>{let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{let img=new Image();img.onload=async()=>{try{
  let c=document.createElement('canvas'),max=1000,scale=Math.min(1,max/img.width);c.width=Math.round(img.width*scale);c.height=Math.round(img.height*scale);c.getContext('2d').drawImage(img,0,0,c.width,c.height);
- let data=c.toDataURL('image/jpeg',.78); await niPhotoApi({action:'upload',data,photoType:'progress',note:''}); await renderPhotos(); alert('Фото сохранено.');
+ let data=c.toDataURL('image/jpeg',.78); await niPhotoApi({photoAction:'upload',data,photoType:'progress',note:''}); await renderPhotos(); alert('Фото сохранено.');
  }catch(err){alert(err.message)} };img.src=r.result};r.readAsDataURL(f);e.target.value=''}}
 handlePhoto($('#photoGallery'));handlePhoto($('#photoCamera'));
 async function renderPhotos(){const grid=$('#photoGrid');if(!grid)return;grid.innerHTML='<div class="history-item">Загрузка фото…</div>';try{
- const j=await niPhotoApi({action:'list'});const photos=j.photos||[];
+ const j=await niPhotoApi({photoAction:'list'});const photos=j.photos||[];
  grid.innerHTML=photos.length?photos.map(x=>`<div><img src="${x.url}" title="${x.created_at||''}" style="width:100%;border-radius:12px"><small>${x.created_at?new Date(x.created_at).toLocaleDateString('ru-RU'):''}</small></div>`).join(''):'<div class="history-item">Фото прогресса пока нет.</div>';
  }catch(e){grid.innerHTML='<div class="history-item">Не удалось загрузить фото.</div>'}}
 function renderProfile(){let p=S.profile;$('#profileName').value=p.name||'';$('#profileGoal').value=p.goal||'Снижение веса';$('#profileHeight').value=p.height||'';$('#profileWeight').value=p.weight||'';$('#profileWater').value=p.waterGoal||2}$('#saveProfile').onclick=()=>{S.profile={name:$('#profileName').value.trim(),goal:$('#profileGoal').value,height:$('#profileHeight').value,weight:$('#profileWeight').value,waterGoal:+$('#profileWater').value||2};save();renderWater();go('home')};
