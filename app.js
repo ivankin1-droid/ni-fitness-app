@@ -464,3 +464,31 @@ async function loadPersonalTrainingPlan(){
  }catch(e){}
 }
 setTimeout(loadPersonalTrainingPlan,1400);
+
+
+/* ===== NI FITNESS · RICH TRAINING CARDS V2 ===== */
+function niEsc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+function openNIExercise(x){
+ let m=document.querySelector('#niExerciseModal');
+ if(!m){m=document.createElement('div');m.id='niExerciseModal';m.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.78);padding:20px;overflow:auto';document.body.appendChild(m)}
+ m.innerHTML=`<div style="max-width:560px;margin:30px auto;background:#17171a;border:1px solid #333;border-radius:22px;padding:18px;color:#f5f3ee">
+ <button onclick="this.closest('#niExerciseModal').style.display='none'" style="float:right">✕</button>
+ <div style="font-size:9px;letter-spacing:.16em;color:#999">${niEsc(x.group||'УПРАЖНЕНИЕ')}</div><h2>${niEsc(x.name)}</h2>
+ ${x.image?`<img src="${niEsc(x.image)}" alt="" style="width:100%;border-radius:16px;margin:8px 0" onerror="this.style.display='none'">`:''}
+ <p><b>Рабочие мышцы:</b> ${niEsc(x.muscles||'—')}</p><p><b>Оборудование:</b> ${niEsc(x.equipment||'—')}</p>
+ <p><b>Техника:</b> ${niEsc(x.technique||'Описание добавляется тренером.')}</p>
+ ${x.breath?`<p><b>Дыхание:</b> ${niEsc(x.breath)}</p>`:''}${x.mistake?`<p><b>Частая ошибка:</b> ${niEsc(x.mistake)}</p>`:''}
+ ${x.note?`<p><b>Комментарий Никиты:</b> ${niEsc(x.note)}</p>`:''}</div>`;m.style.display='block';
+}
+loadPersonalTrainingPlan=async function(){
+ try{
+  const r=await fetch('/api/training-plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({initData:window.Telegram?.WebApp?.initData||''})});
+  if(!r.ok)return;const j=await r.json(),p=j.plan;if(!p)return;
+  const page=document.querySelector('[data-page="exercises"]');if(!page)return;
+  let box=document.querySelector('#personalTrainingPlan');if(!box){box=document.createElement('div');box.id='personalTrainingPlan';(page.querySelector('.page-title')||page).insertAdjacentElement('afterend',box)}
+  box.className='card';box.innerHTML=`<span class="eyebrow">МОЙ ПЛАН</span><h2>${niEsc(p.plan_name||'Персональный план')}</h2>${p.trainer_comment?`<p class="muted">${niEsc(p.trainer_comment)}</p>`:''}
+  ${(p.days||[]).map((d,i)=>`<div class="detail-section"><h4>${niEsc(d.title||`День ${i+1}`)}</h4>${(d.exercises||[]).map((x,k)=>`<button type="button" class="ni-client-ex" data-di="${i}" data-ei="${k}" style="display:block;width:100%;text-align:left;padding:12px;margin:7px 0;border:1px solid #303036;border-radius:14px;background:#18181b;color:#f4f2ed"><b>${niEsc(x.name)}</b><br><small style="color:#999">${niEsc(x.sets)} подх. · ${niEsc(x.reps)} повт. · отдых ${niEsc(x.rest)}</small></button>`).join('')}</div>`).join('')}`;
+  box.querySelectorAll('.ni-client-ex').forEach(b=>b.onclick=()=>openNIExercise(p.days[+b.dataset.di].exercises[+b.dataset.ei]));
+ }catch(e){}
+};
+setTimeout(loadPersonalTrainingPlan,1600);
