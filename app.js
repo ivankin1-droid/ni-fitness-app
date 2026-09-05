@@ -446,3 +446,21 @@ async function loadPersonalAdjustments(){
   }catch(e){}
 }
 setTimeout(loadPersonalAdjustments,1200);
+
+
+/* ===== NI FITNESS · PERSONAL TRAINING PLAN ===== */
+async function loadPersonalTrainingPlan(){
+ try{
+  const r=await fetch('/api/training-plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({initData:window.Telegram?.WebApp?.initData||''})});
+  if(!r.ok)return;
+  const j=await r.json(), p=j.plan;if(!p)return;
+  const page=document.querySelector('[data-page="exercises"]'); if(!page)return;
+  let box=document.querySelector('#personalTrainingPlan');
+  if(!box){box=document.createElement('div');box.id='personalTrainingPlan';const title=page.querySelector('.page-title');title.insertAdjacentElement('afterend',box)}
+  box.className='card';
+  box.innerHTML=`<span class="eyebrow">МОЙ ПЛАН</span><h2>${p.plan_name||'Персональный план'}</h2>
+  ${p.trainer_comment?`<p class="muted">${p.trainer_comment}</p>`:''}
+  ${(p.days||[]).map((d,i)=>`<div class="detail-section"><h4>${d.title||`День ${i+1}`}</h4>${(d.exercises||[]).map(x=>`<div style="padding:9px 0;border-bottom:1px solid #29292e"><b>${x.name}</b><br><small class="muted">${x.sets} подх. · ${x.reps} повт. · отдых ${x.rest}</small></div>`).join('')}</div>`).join('')}`;
+ }catch(e){}
+}
+setTimeout(loadPersonalTrainingPlan,1400);

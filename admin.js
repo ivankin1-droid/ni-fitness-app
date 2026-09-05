@@ -47,8 +47,43 @@ async function openClient(id){
  <div class="detail-section"><h4>История корректировок</h4>
    <div id="adjustmentHistory">${history.length?history.map(a=>`<div class="notice"><b>${a.old_kcal||'—'} → ${a.new_kcal||'—'} ккал</b><br><small>${a.effective_from?new Date(a.effective_from+'T00:00:00').toLocaleDateString('ru-RU'):''}</small><br>${a.trainer_comment||'Без комментария'}</div>`).join(''):'<div class="notice">Корректировок пока нет.</div>'}</div>
  </div>
+ <div class="detail-section"><h4>Тренировочный план</h4>
+   <p class="muted">Назначь клиенту тренировочные дни. Упражнения вводятся построчно.</p>
+   <label>Название плана<input id="trainingPlanName" placeholder="Например: PRO · 3 тренировки"></label>
+   <label>Комментарий тренера<textarea id="trainingComment" placeholder="Фокус недели, техника, ограничения..."></textarea></label>
+   <div id="trainingDaysEditor"></div>
+   <button type="button" class="wide" id="addTrainingDay">+ Добавить тренировочный день</button>
+   <button class="primary wide" id="saveTrainingPlan">Сохранить тренировочный план</button>
+ </div>
+ <div class="detail-section"><h4>История тренировочных планов</h4><div id="trainingHistory"><div class="notice">Загрузка…</div></div></div>
  <button class="primary wide" id="saveClientAccess">Сохранить доступ</button>`;
  $('#clientModal').classList.add('open');
+
+ let trainingPlans=[];
+ try{
+   const tp=await post('/api/admin-training-plans',{telegramId:c.telegram_id,action:'list'});
+   trainingPlans=tp.plans||[];
+ }catch(e){}
+ const activePlan=trainingPlans[0]||null;
+ $('#trainingPlanName').value=activePlan?.plan_name||'';
+ $('#trainingComment').value=activePlan?.trainer_comment||'';
+ $('#trainingDaysEditor').innerHTML=(activePlan?.days?.length?activePlan.days:[{title:'День 1',exercises:[]}]).map(trainingDayBlock).join('');
+ bindTrainingDayRemove();
+ $('#trainingHistory').innerHTML=trainingPlans.length?trainingPlans.map(p=>`<div class="notice"><b>${p.plan_name||'Тренировочный план'}</b><br><small>${new Date(p.created_at).toLocaleDateString('ru-RU')}</small><br>${p.trainer_comment||''}</div>`).join(''):'<div class="notice">Планов пока нет.</div>';
+ $('#addTrainingDay').onclick=()=>{$('#trainingDaysEditor').insertAdjacentHTML('beforeend',trainingDayBlock({title:`День ${$$('.training-day-edit').length+1}`,exercises:[]}));bindTrainingDayRemove()};
+ $('#saveTrainingPlan').onclick=async()=>{
+   const planName=$('#trainingPlanName').value.trim();
+   const trainerComment=$('#trainingComment').value.trim();
+   const days=readTrainingDays();
+   if(!planName){alert('Укажи название тренировочного плана.');return}
+   if(!days.some(d=>d.exercises.length)){alert('Добавь хотя бы одно упражнение.');return}
+   try{
+     await post('/api/admin-training-plans',{telegramId:c.telegram_id,action:'create',planName,trainerComment,days});
+     alert('Тренировочный план сохранён. Клиент увидит его в приложении.');
+     $('#clientModal').classList.remove('open');
+   }catch(e){alert(e.message)}
+ };
+
  $('#saveNutritionAdjustment').onclick=async()=>{
    const newKcal=+$('#adjustKcal').value;
    const comment=$('#adjustComment').value.trim();
@@ -72,6 +107,30 @@ async function openClient(id){
   }catch(e){alert(e.message)}
  };
 }
+
+function trainingDayBlock(day={title:'',exercises:[]}){
+ const rows=(day.exercises||[]).map(x=>`${x.name||''} | ${x.sets||3} | ${x.reps||'8-12'} | ${x.rest||'90 сек'}`).join('\n');
+ return `<div class="card training-day-edit" style="margin:10px 0">
+   <label>День / название<input class="td-title" value="${day.title||''}" placeholder="Например: День 1 · Ноги"></label>
+   <label>Упражнения<textarea class="td-exercises" rows="7" placeholder="Жим ногами | 4 | 10-12 | 90 сек&#10;Румынская тяга | 3 | 8-10 | 120 сек">${rows}</textarea></label>
+   <small class="muted">Формат каждой строки: упражнение | подходы | повторения | отдых</small>
+   <button type="button" class="remove-training-day">Удалить день</button>
+ </div>`;
+}
+function bindTrainingDayRemove(){
+ $$('.remove-training-day').forEach(b=>b.onclick=()=>b.closest('.training-day-edit').remove());
+}
+function readTrainingDays(){
+ return $$('.training-day-edit').map((el,i)=>{
+   const title=el.querySelector('.td-title').value.trim()||`День ${i+1}`;
+   const exercises=el.querySelector('.td-exercises').value.split('\n').map(s=>s.trim()).filter(Boolean).map(line=>{
+     const p=line.split('|').map(x=>x.trim());
+     return {name:p[0]||'',sets:Number(p[1])||3,reps:p[2]||'8-12',rest:p[3]||'90 сек'};
+   }).filter(x=>x.name);
+   return {title,exercises};
+ });
+}
+
 function renderReviews(){
  $('#reviewList').innerHTML=REVIEWS.map(r=>`<button class="admin-client" data-review="${r.id}">
  <div><b>ID ${r.telegram_id}</b><small>${new Date(r.created_at).toLocaleDateString('ru-RU')} · ${r.status}</small></div><span>→</span></button>`).join('')||'<div class="notice">Новых разборов пока нет.</div>';
