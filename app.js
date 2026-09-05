@@ -1,3 +1,4 @@
+/* NI FITNESS v5.3 IMAGE FIX */
 /* NI FITNESS v5.2 PATCH */
 const D=window.NI_DATA,$=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const S=JSON.parse(localStorage.getItem('ni_state_v5')||localStorage.getItem('ni_state_v4')||'{}');S.kcal=S.kcal||1500;S.water=Number.isFinite(S.water)?S.water:1.25;S.done=S.done||{};S.portions=S.portions||{};S.replacements=S.replacements||{};S.measurements=S.measurements||[];S.photos=S.photos||[];S.profile=S.profile||{name:'',goal:'Снижение веса',height:'',weight:'',waterGoal:2};S.assignedKcal=S.assignedKcal||S.kcal||1500;S.kcal=S.assignedKcal;S.monthlyReviews=S.monthlyReviews||[];S.subscription=S.subscription||{active:true,tier:'NI FITNESS'};const save=()=>localStorage.setItem('ni_state_v5',JSON.stringify(S));
@@ -11,8 +12,72 @@ function openReplace(mi,ii){let m=effectiveMeal(mi),ing=m.ingredients[ii],opts=D
 function shopping(){let map={};for(let i=0;i<plan().length;i++){let m=effectiveMeal(i);m.ingredients.forEach(x=>map[x.name]=(map[x.name]||0)+x.grams*7)}$('#shoppingList').innerHTML=Object.entries(map).sort().map(([n,g])=>`<div class="shop-row"><b>${n}</b><span>${g>=1000?(g/1000).toFixed(2).replace(/\.00$/,'')+' кг':Math.round(g)+' г'}</span></div>`).join('')}
 function renderWater(){let goal=+S.profile.waterGoal||2;$('#waterValue').textContent=S.water.toFixed(2).replace(/\.00$/,'');$('#waterGoalText').textContent=goal;$('#waterBar').style.width=Math.min(100,S.water/goal*100)+'%'}$('#waterPlus').onclick=()=>{S.water=Math.round((S.water+.25)*100)/100;save();renderWater()};$('#waterMinus').onclick=()=>{S.water=Math.max(0,Math.round((S.water-.25)*100)/100);save();renderWater()};
 function go(page){$$('.page').forEach(x=>x.classList.toggle('active',x.dataset.page===page));$$('.bottom-nav [data-goto]').forEach(x=>x.classList.toggle('active',x.dataset.goto===page));scrollTo({top:0,behavior:'smooth'})}$$('[data-goto]').forEach(b=>b.onclick=()=>go(b.dataset.goto));
-let currentGroup='Ноги';const groups=[...new Set(D.exercises.map(x=>x.group))];function renderExercises(){$('#muscleTabs').innerHTML=groups.map(g=>`<button class="${g===currentGroup?'active':''}" data-group="${g}">${g}</button>`).join('');let list=D.exercises.filter(e=>e.group===currentGroup);$('#exerciseList').innerHTML=list.map(e=>`<button class="exercise" data-ex="${e.id}"><div class="exercise-main"><img src="${e.image}" loading="lazy" onerror="this.onerror=null;this.src=''+e.image.split('/').pop()"><div><h3>${String(e.id).padStart(3,'0')} · ${e.name}</h3><p>${e.equipment}</p></div></div><span class="arrow">→</span></button>`).join('');$$('[data-group]').forEach(b=>b.onclick=()=>{currentGroup=b.dataset.group;renderExercises()});$$('[data-ex]').forEach(b=>b.onclick=()=>openExercise(+b.dataset.ex))}
-function openExercise(id){let e=D.exercises.find(x=>x.id===id);$('#exerciseDetail').innerHTML=`<span class="eyebrow">${e.group.toUpperCase()} · ${String(e.id).padStart(3,'0')}</span><h2>${e.name}</h2><img class="detail-photo" src="${e.image}" onerror="this.onerror=null;this.src=''+e.image.split('/').pop()"><div class="detail-grid"><div class="detail-box"><small>Оборудование</small><p>${e.equipment}</p></div><div class="detail-box"><small>Суставы</small><p>${e.joints||'—'}</p></div><div class="detail-box"><small>Основные мышцы</small><p>${e.muscles||'—'}</p></div><div class="detail-box"><small>Дополнительно</small><p>${e.assist||'—'}</p></div></div><div class="detail-section"><h4>Техника</h4><p>${e.technique}</p></div><div class="detail-section"><h4>Дыхание</h4><p>${e.breath}</p></div><div class="detail-section"><h4>Частая ошибка</h4><p>${e.mistake}</p></div>`;$('#exerciseModal').classList.add('open')}
+let currentGroup='Ноги';
+const groups=[...new Set(D.exercises.map(x=>x.group))];
+
+function exerciseImageSources(e){
+  const file=(e.image||`ex-${String(e.id).padStart(3,'0')}.jpg`).split('/').pop();
+  return {
+    primary:`assets/exercises/${file}`,
+    fallback:`/${file}`
+  };
+}
+
+function renderExercises(){
+  $('#muscleTabs').innerHTML=groups.map(g=>`<button class="${g===currentGroup?'active':''}" data-group="${g}">${g}</button>`).join('');
+  const list=D.exercises.filter(e=>e.group===currentGroup);
+
+  $('#exerciseList').innerHTML=list.map(e=>{
+    const img=exerciseImageSources(e);
+    return `<button class="exercise" data-ex="${e.id}">
+      <div class="exercise-main">
+        <img src="${img.primary}" data-fallback="${img.fallback}" loading="lazy" alt="${e.name}">
+        <div><h3>${String(e.id).padStart(3,'0')} · ${e.name}</h3><p>${e.equipment}</p></div>
+      </div>
+      <span class="arrow">→</span>
+    </button>`;
+  }).join('');
+
+  $$('#exerciseList img[data-fallback]').forEach(img=>{
+    img.onerror=()=>{
+      const fb=img.dataset.fallback;
+      if(img.src.endsWith(fb)) return;
+      img.onerror=null;
+      img.src=fb;
+    };
+  });
+
+  $$('[data-group]').forEach(b=>b.onclick=()=>{currentGroup=b.dataset.group;renderExercises()});
+  $$('[data-ex]').forEach(b=>b.onclick=()=>openExercise(+b.dataset.ex));
+}
+
+function openExercise(id){
+  const e=D.exercises.find(x=>x.id===id);
+  const img=exerciseImageSources(e);
+
+  $('#exerciseDetail').innerHTML=`
+    <span class="eyebrow">${e.group.toUpperCase()} · ${String(e.id).padStart(3,'0')}</span>
+    <h2>${e.name}</h2>
+    <img class="detail-photo" id="exerciseDetailPhoto" src="${img.primary}" data-fallback="${img.fallback}" alt="${e.name}">
+    <div class="detail-grid">
+      <div class="detail-box"><small>Оборудование</small><p>${e.equipment}</p></div>
+      <div class="detail-box"><small>Суставы</small><p>${e.joints||'—'}</p></div>
+      <div class="detail-box"><small>Основные мышцы</small><p>${e.muscles||'—'}</p></div>
+      <div class="detail-box"><small>Дополнительно</small><p>${e.assist||'—'}</p></div>
+    </div>
+    <div class="detail-section"><h4>Техника</h4><p>${e.technique}</p></div>
+    <div class="detail-section"><h4>Дыхание</h4><p>${e.breath}</p></div>
+    <div class="detail-section"><h4>Частая ошибка</h4><p>${e.mistake}</p></div>`;
+
+  const photo=$('#exerciseDetailPhoto');
+  photo.onerror=()=>{
+    const fb=photo.dataset.fallback;
+    photo.onerror=null;
+    photo.src=fb;
+  };
+
+  $('#exerciseModal').classList.add('open');
+}
 $$('.modal .close').forEach(b=>b.onclick=()=>b.closest('.modal').classList.remove('open'));$$('.modal').forEach(m=>m.onclick=e=>{if(e.target===m)m.classList.remove('open')});
 function renderMaterials(){$('#materialCards').innerHTML=D.materials.map(x=>`<div class="material-card"><h3>${x.title}</h3><p>${x.text}</p></div>`).join('')}
 function renderHistory(){$('#measurementHistory').innerHTML=S.measurements.length?S.measurements.slice().reverse().slice(0,8).map(x=>`<div class="history-item"><b>${x.date}</b> · вес ${x.weight||'—'} кг · талия ${x.waist||'—'} · грудь ${x.chest||'—'} · бёдра ${x.hips||'—'} см</div>`).join(''):'<div class="history-item">Пока нет сохранённых замеров.</div>'}$('#saveMeasurements').onclick=()=>{S.measurements.push({date:new Date().toLocaleDateString('ru-RU'),weight:$('#weightInput').value,waist:$('#waistInput').value,chest:$('#chestInput').value,hips:$('#hipsInput').value});save();renderHistory();['#weightInput','#waistInput','#chestInput','#hipsInput'].forEach(x=>$(x).value='')};
