@@ -195,13 +195,88 @@ function setServerStatus(text, ok=false){
   if(el) el.textContent=text;
   if(pill){pill.textContent=ok?'ONLINE':'CHECK';pill.classList.toggle('ok',ok)}
 }
+
+const TARIFFS={
+  '690':{name:'START',level:1},
+  '1490':{name:'PRO',level:2},
+  '2990':{name:'PREMIUM',level:3}
+};
+function currentTariff(){
+  const code=String(S.subscription?.tier||SERVER_PROFILE?.tariff_code||'');
+  return {code,...(TARIFFS[code]||{name:'NO PLAN',level:0})};
+}
+function featureRequiredLevel(feature){
+  return {
+    training:2,
+    'monthly-review':2,
+    premium:3
+  }[feature]||1;
+}
+function openUpgrade(feature){
+  const need=featureRequiredLevel(feature);
+  const title=$('#upgradeTitle'), text=$('#upgradeText'), modal=$('#upgradeModal');
+  if(!modal){location.href='/payment.html';return}
+  if(title) title.textContent=need===3?'Доступно в PREMIUM':'Доступно в PRO';
+  if(text) text.textContent=need===3
+    ?'Персональные корректировки питания и тренировок, личный разбор и приоритетная обратная связь входят в PREMIUM.'
+    :'Тренировочный раздел, все материалы, фото прогресса и ежемесячный отчёт входят в PRO и PREMIUM.';
+  modal.classList.add('open');
+}
+function applyTariffAccess(){
+  if(S.server?.role==='admin') return;
+  const tariff=currentTariff();
+
+  // Training page/nav/quick access remain visible but open an upgrade prompt on START.
+  $$('[data-goto="exercises"]').forEach(btn=>{
+    if(tariff.level<2){
+      btn.onclick=(e)=>{e.preventDefault();openUpgrade('training')};
+      btn.classList.add('tier-locked');
+    }else{
+      btn.onclick=()=>go('exercises');
+      btn.classList.remove('tier-locked');
+    }
+  });
+
+  const review=$('[data-feature="monthly-review"]');
+  if(review){
+    review.classList.toggle('feature-locked',tariff.level<2);
+    if(tariff.level<2){
+      review.innerHTML=`<span class="eyebrow">PRO FEATURE</span><h2>Ежемесячный разбор прогресса</h2><p>Отправка отчёта тренеру и обратная связь доступны в PRO и PREMIUM.</p><button class="primary wide" id="reviewUpgradeBtn">Перейти на PRO</button>`;
+      const b=$('#reviewUpgradeBtn'); if(b)b.onclick=()=>openUpgrade('monthly-review');
+    }
+  }
+
+  // START gets only the two foundational guides.
+  if(tariff.level===1){
+    $$('.article-open').forEach(btn=>btn.style.display='none');
+  }
+
+  // Profile subscription card shows the actual paid plan.
+  const card=$('.subscription-card');
+  if(card && tariff.level){
+    const h=card.querySelector('h2');
+    if(h)h.textContent=`NI FITNESS · ${tariff.name}`;
+  }
+}
+function bindTariffPaymentButtons(){
+  $$('[data-buy-tariff]').forEach(btn=>{
+    btn.onclick=()=>{
+      const tariff=btn.dataset.buyTariff;
+      location.href=`/payment.html?tariff=${encodeURIComponent(tariff)}`;
+    };
+  });
+  const up=$('#upgradePayBtn');
+  if(up)up.onclick=()=>location.href='/payment.html';
+}
+
 function showAccessLock(profile, reason){
   const lock=$('#accessLock');
   if(!lock)return;
   const id=profile?.telegram_id || S.server.telegramId || '—';
   $('#lockTelegramId').textContent=id;
-  $('#accessLockTitle').textContent='Доступ не активирован';
-  $('#accessLockText').textContent=reason||'Подписка не активна. Обратитесь к тренеру для подключения.';
+  $('#accessLockTitle').textContent='Выберите свой план';
+  $('#accessLockText').textContent='Сравните START, PRO и PREMIUM и выберите подходящий уровень доступа.';
+  bindTariffPaymentButtons();
   lock.style.display='flex';
 }
 function hideAccessLock(){
@@ -220,6 +295,7 @@ function applyServerProfile(profile){
   S.subscription=S.subscription||{};
   S.subscription.active=subscriptionIsActive(profile);
   S.subscription.until=profile.subscription_until||null;
+  S.subscription.tier=String(profile.tariff_code||'');
   S.allowedMaterials=Array.isArray(profile.allowed_materials)
     ? profile.allowed_materials
     : (()=>{try{const a=JSON.parse(profile.allowed_materials||'null');return Array.isArray(a)?a:null}catch(e){return null}})();
@@ -242,6 +318,7 @@ function applyServerProfile(profile){
 
   renderAll();
   applyAllowedMaterials();
+  applyTariffAccess();
 }
 async function loadServerSession(){
   const initData=telegramInitData();
@@ -337,3 +414,13 @@ async function loadRemoteReviews(){
 
 loadServerSession().then(loadRemoteReviews);
 
+
+
+/* ===== NI FITNESS v7 · TARIFF UI ===== */
+bindTariffPaymentButtons();
+const upgradeModal=$('#upgradeModal');
+if(upgradeModal){
+  const close=upgradeModal.querySelector('.close');
+  if(close)close.onclick=()=>upgradeModal.classList.remove('open');
+  upgradeModal.onclick=e=>{if(e.target===upgradeModal)upgradeModal.classList.remove('open')};
+}
