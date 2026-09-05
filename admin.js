@@ -30,7 +30,7 @@ async function openClient(id){
  const c=CLIENTS.find(x=>String(x.telegram_id)===String(id));if(!c)return;
  let history=[],progressPhotos=[];
  try{const h=await post('/api/admin-adjustments',{telegramId:c.telegram_id,action:'list'});history=h.adjustments||[]}catch(e){}
- try{const ph=await post('/api/progress-photos',{mode:'admin',telegramId:c.telegram_id});progressPhotos=ph.photos||[]}catch(e){}
+ try{const ph=await post('/api/monthly-review',{action:'photos-admin',telegramId:c.telegram_id});progressPhotos=ph.photos||[]}catch(e){}
  $('#clientDetail').innerHTML=`<span class="eyebrow">CLIENT</span><h2>${c.first_name||'Клиент'} ${c.last_name||''}</h2>
  <div class="profile-summary">Telegram ID: <b>${c.telegram_id}</b><br>@${c.username||'—'}</div>
  <label>Назначенный план<select id="adminKcal">${[1200,1500,1800,2000,2200,2500,3000,3200,3500,4000].map(k=>`<option ${Number(c.assigned_kcal)===k?'selected':''}>${k}</option>`).join('')}</select></label>
