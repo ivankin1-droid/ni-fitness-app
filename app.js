@@ -80,6 +80,21 @@ function openExercise(id){
 }
 $$('.modal .close').forEach(b=>b.onclick=()=>b.closest('.modal').classList.remove('open'));$$('.modal').forEach(m=>m.onclick=e=>{if(e.target===m)m.classList.remove('open')});
 function renderMaterials(){$('#materialCards').innerHTML=D.materials.map(x=>`<div class="material-card"><h3>${x.title}</h3><p>${x.text}</p></div>`).join('')}
+function applyAllowedMaterials(){
+  const allowed=S.allowedMaterials;
+  if(!Array.isArray(allowed) || S.server?.role==='admin') return;
+
+  $$('.guide-open').forEach(btn=>{
+    const g=String(btn.dataset.guide||'');
+    const key=g.includes('nutrition')?'nutrition':'products';
+    btn.style.display=allowed.includes(key)?'':'none';
+  });
+
+  $$('.article-open').forEach(btn=>{
+    const key=String(btn.dataset.article||'');
+    btn.style.display=allowed.includes(key)?'':'none';
+  });
+}
 function renderHistory(){$('#measurementHistory').innerHTML=S.measurements.length?S.measurements.slice().reverse().slice(0,8).map(x=>`<div class="history-item"><b>${x.date}</b> · вес ${x.weight||'—'} кг · талия ${x.waist||'—'} · грудь ${x.chest||'—'} · бёдра ${x.hips||'—'} см</div>`).join(''):'<div class="history-item">Пока нет сохранённых замеров.</div>'}$('#saveMeasurements').onclick=()=>{S.measurements.push({date:new Date().toLocaleDateString('ru-RU'),weight:$('#weightInput').value,waist:$('#waistInput').value,chest:$('#chestInput').value,hips:$('#hipsInput').value});save();renderHistory();['#weightInput','#waistInput','#chestInput','#hipsInput'].forEach(x=>$(x).value='')};
 function handlePhoto(input){input.onchange=e=>{let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{let img=new Image();img.onload=()=>{let c=document.createElement('canvas'),max=900,scale=Math.min(1,max/img.width);c.width=img.width*scale;c.height=img.height*scale;c.getContext('2d').drawImage(img,0,0,c.width,c.height);S.photos.push({date:new Date().toISOString(),data:c.toDataURL('image/jpeg',.72)});if(S.photos.length>15)S.photos.shift();save();renderPhotos()};img.src=r.result};r.readAsDataURL(f);e.target.value=''}}handlePhoto($('#photoGallery'));handlePhoto($('#photoCamera'));function renderPhotos(){$('#photoGrid').innerHTML=S.photos.slice().reverse().slice(0,12).map(x=>`<img src="${x.data}" title="${x.date}">`).join('')}
 function renderProfile(){let p=S.profile;$('#profileName').value=p.name||'';$('#profileGoal').value=p.goal||'Снижение веса';$('#profileHeight').value=p.height||'';$('#profileWeight').value=p.weight||'';$('#profileWater').value=p.waterGoal||2}$('#saveProfile').onclick=()=>{S.profile={name:$('#profileName').value.trim(),goal:$('#profileGoal').value,height:$('#profileHeight').value,weight:$('#profileWeight').value,waterGoal:+$('#profileWater').value||2};save();renderWater();go('home')};
@@ -205,6 +220,9 @@ function applyServerProfile(profile){
   S.subscription=S.subscription||{};
   S.subscription.active=subscriptionIsActive(profile);
   S.subscription.until=profile.subscription_until||null;
+  S.allowedMaterials=Array.isArray(profile.allowed_materials)
+    ? profile.allowed_materials
+    : (()=>{try{const a=JSON.parse(profile.allowed_materials||'null');return Array.isArray(a)?a:null}catch(e){return null}})();
   S.profile=S.profile||{};
   if(profile.first_name && !S.profile.name) S.profile.name=profile.first_name;
   save();
@@ -223,6 +241,7 @@ function applyServerProfile(profile){
   else showAccessLock(profile,'Подписка сейчас не активна. После активации тренером приложение откроется автоматически.');
 
   renderAll();
+  applyAllowedMaterials();
 }
 async function loadServerSession(){
   const initData=telegramInitData();
