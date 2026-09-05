@@ -1,4 +1,8 @@
 const crypto=require('crypto');
+const https=require('https');
+const tls=require('tls');
+const fs=require('fs');
+const path=require('path');
 const {requireSession,sb,json}=require('./_lib');
 
 const PRICES={'690':69000,'1490':149000,'2990':299000};
@@ -22,6 +26,42 @@ function origin(req){
   const proto=(req.headers['x-forwarded-proto']||'https').split(',')[0];
   return `${proto}://${req.headers.host}`;
 }
+
+function tbankPostJson(payload){
+  return new Promise((resolve,reject)=>{
+    const certPath=path.join(__dirname,'HARICA-TLS-Root-2021-RSA.pem');
+    const harica=fs.readFileSync(certPath,'utf8');
+
+    const body=JSON.stringify(payload);
+    const req=https.request({
+      hostname:'securepay.tinkoff.ru',
+      port:443,
+      path:'/v2/Init',
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'Content-Length':Buffer.byteLength(body)
+      },
+      // Сохраняем стандартные CA Node и дополнительно доверяем официальному HARICA root.
+      ca:[...tls.rootCertificates,harica],
+      rejectUnauthorized:true,
+      servername:'securepay.tinkoff.ru'
+    },res=>{
+      let raw='';
+      res.setEncoding('utf8');
+      res.on('data',chunk=>raw+=chunk);
+      res.on('end',()=>{
+        let data={};
+        try{data=raw?JSON.parse(raw):{}}catch(e){data={raw}}
+        resolve({ok:res.statusCode>=200&&res.statusCode<300,status:res.statusCode,data});
+      });
+    });
+    req.on('error',reject);
+    req.write(body);
+    req.end();
+  });
+}
+
 module.exports=async function handler(req,res){
   if(req.method!=='POST')return json(res,405,{error:'POST only'});
   try{
@@ -44,12 +84,8 @@ module.exports=async function handler(req,res){
     };
     payload.Token=token(payload);
 
-    const response=await fetch('https://securepay.tinkoff.ru/v2/Init',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(payload)
-    });
-    const data=await response.json().catch(()=>({}));
+    const response=await tbankPostJson(payload);
+    const data=response.data||{};
 
     if(!response.ok || !data.Success || !data.PaymentURL){
       console.error('TBANK_INIT_ERROR',data);
