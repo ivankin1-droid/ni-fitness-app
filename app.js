@@ -241,8 +241,14 @@ async function loadServerSession(){
     const result=await apiPost('/api/session',{});
     applyServerProfile(result.profile);
   }catch(e){
-    setServerStatus(e.message||'Не удалось проверить доступ',false);
-    showAccessLock(null,'Не удалось подтвердить доступ. Закройте Mini App и откройте его из Telegram ещё раз.');
+    const tgId=window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
+    if(tgId){
+      S.server.telegramId=String(tgId);
+      const idEl=$('#serverTelegramId'); if(idEl) idEl.textContent=String(tgId);
+    }
+    const message=e.message||'Не удалось проверить доступ';
+    setServerStatus(message,false);
+    showAccessLock({telegram_id:tgId||null},message);
   }
 }
 
