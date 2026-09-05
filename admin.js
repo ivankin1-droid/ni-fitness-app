@@ -53,7 +53,7 @@ function renderReviews(){
  $$('[data-review]').forEach(b=>b.onclick=()=>openReview(b.dataset.review));
 }
 function openReview(id){
- const r=REVIEWS.find(x=>x.id===id);if(!r)return;
+ const r=REVIEWS.find(x=>String(x.id)===String(id));if(!r)return;
  $('#adminReviewDetail').innerHTML=`<span class="eyebrow">MONTHLY REVIEW</span><h2>Клиент ${r.telegram_id}</h2>
  <div class="detail-section"><h4>Что получилось</h4><p>${r.win||'—'}</p></div>
  <div class="detail-section"><h4>Что было сложно</h4><p>${r.hard||'—'}</p></div>
