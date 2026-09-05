@@ -1,0 +1,19 @@
+
+/* NI FITNESS v7 · tariff system */
+.tariff-paywall{width:min(760px,calc(100vw - 24px));max-height:92vh;overflow:auto;text-align:left}
+.tariff-paywall>.logo,.tariff-paywall>.eyebrow,.tariff-paywall>h2,.tariff-paywall>p,.tariff-paywall>.lock-id{text-align:center;margin-left:auto;margin-right:auto}
+.tariff-grid{display:grid;gap:12px;margin-top:18px}
+.tariff-card{position:relative;background:#151518;border:1px solid #303036;border-radius:20px;padding:17px}
+.tariff-card.featured{border-color:#696970}
+.tariff-badge{position:absolute;right:14px;top:14px;font-size:8px;letter-spacing:.16em;border:1px solid #555;border-radius:99px;padding:5px 7px;color:#bbb}
+.tariff-name{font-size:11px;letter-spacing:.18em;color:#aaa;font-weight:800}
+.tariff-price{font-size:29px;font-weight:850;letter-spacing:-.04em;margin:7px 0}
+.tariff-price small{font-size:10px;color:#777;font-weight:500}
+.tariff-card p{font-size:11px;line-height:1.5;color:#888}
+.tariff-card ul{list-style:none;padding:0;margin:14px 0;display:grid;gap:7px;font-size:11px}
+.tariff-card li.off{color:#626269}
+.tariff-buy{width:100%}
+.tariff-footnote{text-align:center!important;color:#666;font-size:10px;line-height:1.5;margin-top:15px!important}
+.tier-locked{opacity:.62}
+.feature-locked{border:1px dashed #444}
+@media(min-width:680px){.tariff-grid{grid-template-columns:repeat(3,1fr)}}
