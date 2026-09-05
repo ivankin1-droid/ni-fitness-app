@@ -424,3 +424,25 @@ if(upgradeModal){
   if(close)close.onclick=()=>upgradeModal.classList.remove('open');
   upgradeModal.onclick=e=>{if(e.target===upgradeModal)upgradeModal.classList.remove('open')};
 }
+
+
+/* ===== NI FITNESS · PERSONAL PLAN ADJUSTMENTS ===== */
+async function loadPersonalAdjustments(){
+  try{
+    const r=await fetch('/api/plan-adjustments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({initData:window.Telegram?.WebApp?.initData||''})});
+    if(!r.ok)return;
+    const j=await r.json(); const a=(j.adjustments||[])[0]; if(!a)return;
+    const key='ni_seen_adjustment_'+a.id;
+    let host=document.querySelector('#personalAdjustmentBanner');
+    if(!host){
+      host=document.createElement('div'); host.id='personalAdjustmentBanner';
+      host.style.cssText='margin:12px 16px;padding:16px;border:1px solid #3a3a40;border-radius:18px;background:#17171a;color:#f4f2ed;line-height:1.45';
+      const main=document.querySelector('main')||document.body; main.prepend(host);
+    }
+    host.innerHTML=`<div style="font-size:9px;letter-spacing:.18em;color:#999;font-weight:800">ПЛАН ОБНОВЛЁН НИКИТОЙ</div>
+      <div style="font-size:20px;font-weight:800;margin:6px 0">${a.new_kcal} ккал</div>
+      <div style="font-size:12px;color:#aaa">${a.trainer_comment||''}</div>
+      <div style="font-size:10px;color:#666;margin-top:8px">Действует с ${a.effective_from?new Date(a.effective_from+'T00:00:00').toLocaleDateString('ru-RU'):''}</div>`;
+  }catch(e){}
+}
+setTimeout(loadPersonalAdjustments,1200);

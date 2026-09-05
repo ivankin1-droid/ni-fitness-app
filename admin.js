@@ -1,6 +1,6 @@
 
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
-let CLIENTS=[],REVIEWS=[];
+let CLIENTS=[],REVIEWS=[],ADJUSTMENTS=[];
 try{Telegram.WebApp.ready();Telegram.WebApp.expand()}catch(e){}
 const initData=()=>window.Telegram?.WebApp?.initData||'';
 async function post(path,body={}){
@@ -26,8 +26,10 @@ function renderClients(){
  </button>`).join('')||'<div class="notice">Клиентов пока нет.</div>';
  $$('[data-id]').forEach(b=>b.onclick=()=>openClient(b.dataset.id));
 }
-function openClient(id){
+async function openClient(id){
  const c=CLIENTS.find(x=>String(x.telegram_id)===String(id));if(!c)return;
+ let history=[];
+ try{const h=await post('/api/admin-adjustments',{telegramId:c.telegram_id,action:'list'});history=h.adjustments||[]}catch(e){}
  $('#clientDetail').innerHTML=`<span class="eyebrow">CLIENT</span><h2>${c.first_name||'Клиент'} ${c.last_name||''}</h2>
  <div class="profile-summary">Telegram ID: <b>${c.telegram_id}</b><br>@${c.username||'—'}</div>
  <label>Назначенный план<select id="adminKcal">${[1200,1500,1800,2000,2200,2500,3000,3200,3500,4000].map(k=>`<option ${Number(c.assigned_kcal)===k?'selected':''}>${k}</option>`).join('')}</select></label>
@@ -35,8 +37,31 @@ function openClient(id){
  <label>Доступ до<input id="adminSubUntil" type="date" value="${c.subscription_until?c.subscription_until.slice(0,10):''}"></label>
  <div class="detail-section"><h4>Материалы</h4>
  ${['nutrition','products','protein','goals','labels'].map(x=>`<label class="switch-row"><span>${x}</span><input type="checkbox" data-mat="${x}" ${(c.allowed_materials||[]).includes(x)?'checked':''}></label>`).join('')}
- </div><button class="primary wide" id="saveClientAccess">Сохранить доступ</button>`;
+ </div>
+ <div class="detail-section"><h4>Корректировка питания</h4>
+   <label>Новая калорийность<select id="adjustKcal">${[1200,1500,1800,2000,2200,2500,3000,3200,3500,4000].map(k=>`<option ${Number(c.assigned_kcal)===k?'selected':''}>${k}</option>`).join('')}</select></label>
+   <label>Комментарий клиенту<textarea id="adjustComment" placeholder="Например: на ближайшие 2 недели снижаем до 2000 ккал. Белок держим стабильно, углеводы распределяем вокруг тренировки."></textarea></label>
+   <label>Действует с<input id="adjustDate" type="date" value="${new Date().toISOString().slice(0,10)}"></label>
+   <button class="primary wide" id="saveNutritionAdjustment">Сохранить корректировку</button>
+ </div>
+ <div class="detail-section"><h4>История корректировок</h4>
+   <div id="adjustmentHistory">${history.length?history.map(a=>`<div class="notice"><b>${a.old_kcal||'—'} → ${a.new_kcal||'—'} ккал</b><br><small>${a.effective_from?new Date(a.effective_from+'T00:00:00').toLocaleDateString('ru-RU'):''}</small><br>${a.trainer_comment||'Без комментария'}</div>`).join(''):'<div class="notice">Корректировок пока нет.</div>'}</div>
+ </div>
+ <button class="primary wide" id="saveClientAccess">Сохранить доступ</button>`;
  $('#clientModal').classList.add('open');
+ $('#saveNutritionAdjustment').onclick=async()=>{
+   const newKcal=+$('#adjustKcal').value;
+   const comment=$('#adjustComment').value.trim();
+   const effectiveFrom=$('#adjustDate').value;
+   if(!comment){alert('Добавь комментарий клиенту.');return}
+   try{
+     const r=await post('/api/admin-adjustments',{telegramId:c.telegram_id,action:'create',newKcal,trainerComment:comment,effectiveFrom});
+     c.assigned_kcal=r.profile.assigned_kcal;
+     const i=CLIENTS.findIndex(x=>String(x.telegram_id)===String(c.telegram_id)); if(i>=0)CLIENTS[i]=r.profile;
+     alert('Корректировка сохранена. Клиент увидит её в приложении.');
+     $('#clientModal').classList.remove('open'); renderClients();
+   }catch(e){alert(e.message)}
+ };
  $('#saveClientAccess').onclick=async()=>{
   const mats=$$('[data-mat]').filter(x=>x.checked).map(x=>x.dataset.mat);
   const until=$('#adminSubUntil').value?new Date($('#adminSubUntil').value+'T23:59:59').toISOString():null;
