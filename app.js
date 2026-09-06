@@ -101,8 +101,8 @@ async function niPhotoApi(payload){
  const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||'Ошибка фото');return j;
 }
 function handlePhoto(input){input.onchange=e=>{let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{let img=new Image();img.onload=async()=>{try{
- let c=document.createElement('canvas'),max=1000,scale=Math.min(1,max/img.width);c.width=Math.round(img.width*scale);c.height=Math.round(img.height*scale);c.getContext('2d').drawImage(img,0,0,c.width,c.height);
- let data=c.toDataURL('image/jpeg',.78); await niPhotoApi({photoAction:'upload',data,photoType:'progress',note:''}); await renderPhotos(); alert('Фото сохранено.');
+ let c=document.createElement('canvas'),max=700,scale=Math.min(1,max/img.width);c.width=Math.round(img.width*scale);c.height=Math.round(img.height*scale);c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+ let data=c.toDataURL('image/jpeg',.55); await niPhotoApi({photoAction:'upload',data,photoType:'progress',note:''}); await renderPhotos(); alert('Фото сохранено.');
  }catch(err){alert(err.message)} };img.src=r.result};r.readAsDataURL(f);e.target.value=''}}
 handlePhoto($('#photoGallery'));handlePhoto($('#photoCamera'));
 async function renderPhotos(){const grid=$('#photoGrid');if(!grid)return;grid.innerHTML='<div class="history-item">Загрузка фото…</div>';try{
