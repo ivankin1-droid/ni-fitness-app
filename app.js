@@ -261,11 +261,8 @@ function applyTariffAccess(){
 
   const review=$('[data-feature="monthly-review"]');
   if(review){
-    review.classList.toggle('feature-locked',tariff.level<2);
-    if(tariff.level<2){
-      review.innerHTML=`<span class="eyebrow">PRO FEATURE</span><h2>Ежемесячный разбор прогресса</h2><p>Отправка отчёта тренеру и обратная связь доступны в PRO и PREMIUM.</p><button class="primary wide" id="reviewUpgradeBtn">Перейти на PRO</button>`;
-      const b=$('#reviewUpgradeBtn'); if(b)b.onclick=()=>openUpgrade('monthly-review');
-    }
+    // Отчёт тренеру доступен на всех активных тарифах, включая START.
+    review.classList.remove('feature-locked');
   }
 
   // START gets only the two foundational guides.
