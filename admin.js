@@ -8,6 +8,10 @@ async function post(path,body={}){
  const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||'Ошибка');return j;
 }
 function fmtDate(s){return s?new Date(s).toLocaleDateString('ru-RU'):'без срока'}
+function tariffName(code){
+ const c=String(code||'');
+ return c==='690'?'START':c==='1490'?'PRO':c==='2990'?'PREMIUM':'—';
+}
 async function load(){
  try{
   const s=await post('/api/session');
@@ -22,7 +26,7 @@ function renderClients(){
  const rows=CLIENTS.filter(c=>!q||String(c.telegram_id).includes(q)||String(c.username||'').toLowerCase().includes(q)||String(c.first_name||'').toLowerCase().includes(q));
  $('#clientList').innerHTML=rows.map(c=>`<button class="admin-client" data-id="${c.telegram_id}">
   <div><b>${c.first_name||'Без имени'} ${c.last_name||''}</b><small>@${c.username||'—'} · ID ${c.telegram_id}</small></div>
-  <div class="admin-client-meta"><span>${c.assigned_kcal} ккал</span><span class="${c.subscription_active?'good':'bad'}">${c.subscription_active?'ACTIVE':'PAUSED'}</span></div>
+  <div class="admin-client-meta"><span>${tariffName(c.tariff_code)} · ${c.assigned_kcal} ккал</span><span class="${c.subscription_active?'good':'bad'}">${c.subscription_active?'ACTIVE':'PAUSED'}</span></div>
  </button>`).join('')||'<div class="notice">Клиентов пока нет.</div>';
  $$('[data-id]').forEach(b=>b.onclick=()=>openClient(b.dataset.id));
 }
@@ -34,9 +38,20 @@ async function openClient(id){
  
  $('#clientDetail').innerHTML=`<span class="eyebrow">CLIENT</span><h2>${c.first_name||'Клиент'} ${c.last_name||''}</h2>
  <div class="profile-summary">Telegram ID: <b>${c.telegram_id}</b><br>@${c.username||'—'}</div>
+ <label>Тариф
+   <select id="adminTariff">
+     <option value="690" ${String(c.tariff_code)==='690'?'selected':''}>START · 690 ₽</option>
+     <option value="1490" ${String(c.tariff_code)==='1490'?'selected':''}>PRO · 1490 ₽</option>
+     <option value="2990" ${String(c.tariff_code)==='2990'?'selected':''}>PREMIUM · 2990 ₽</option>
+   </select>
+ </label>
  <label>Назначенный план<select id="adminKcal">${[1200,1500,1800,2000,2200,2500,3000,3200,3500,4000].map(k=>`<option ${Number(c.assigned_kcal)===k?'selected':''}>${k}</option>`).join('')}</select></label>
  <label class="switch-row"><span>Подписка активна</span><input id="adminSubActive" type="checkbox" ${c.subscription_active?'checked':''}></label>
  <label>Доступ до<input id="adminSubUntil" type="date" value="${c.subscription_until?c.subscription_until.slice(0,10):''}"></label>
+ <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0 14px">
+   <button type="button" id="access30">+ 30 дней</button>
+   <button type="button" id="access90">+ 90 дней</button>
+ </div>
  <div class="detail-section"><h4>Материалы</h4>
  ${['nutrition','products','protein','goals','labels'].map(x=>`<label class="switch-row"><span>${x}</span><input type="checkbox" data-mat="${x}" ${(c.allowed_materials||[]).includes(x)?'checked':''}></label>`).join('')}
  </div>
@@ -108,11 +123,20 @@ async function openClient(id){
      $('#clientModal').classList.remove('open'); renderClients();
    }catch(e){alert(e.message)}
  };
+ const setAccessDays=(days)=>{
+   const base=new Date();
+   base.setDate(base.getDate()+days);
+   $('#adminSubUntil').value=base.toISOString().slice(0,10);
+   $('#adminSubActive').checked=true;
+ };
+ $('#access30').onclick=()=>setAccessDays(30);
+ $('#access90').onclick=()=>setAccessDays(90);
+
  $('#saveClientAccess').onclick=async()=>{
   const mats=$$('[data-mat]').filter(x=>x.checked).map(x=>x.dataset.mat);
   const until=$('#adminSubUntil').value?new Date($('#adminSubUntil').value+'T23:59:59').toISOString():null;
   try{
-   const r=await post('/api/admin-update-client',{telegramId:c.telegram_id,assignedKcal:+$('#adminKcal').value,subscriptionActive:$('#adminSubActive').checked,subscriptionUntil:until,allowedMaterials:mats});
+   const r=await post('/api/admin-update-client',{telegramId:c.telegram_id,tariffCode:+$('#adminTariff').value,assignedKcal:+$('#adminKcal').value,subscriptionActive:$('#adminSubActive').checked,subscriptionUntil:until,allowedMaterials:mats});
    const i=CLIENTS.findIndex(x=>String(x.telegram_id)===String(c.telegram_id));CLIENTS[i]=r.profile;
    $('#clientModal').classList.remove('open');renderClients();
   }catch(e){alert(e.message)}
