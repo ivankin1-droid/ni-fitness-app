@@ -112,7 +112,7 @@ async function niPhotoApi(payload){
  const r=await fetch('/api/training-plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({initData:window.Telegram?.WebApp?.initData||'',...payload})});
  const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||'Ошибка фото');return j;
 }
-function handlePhoto(input){input.onchange=e=>{let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{let img=new Image();img.onload=async()=>{try{
+function handlePhoto(input){if(!input)return;input.onchange=e=>{let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{let img=new Image();img.onload=async()=>{try{
  let c=document.createElement('canvas'),max=700,scale=Math.min(1,max/img.width);c.width=Math.round(img.width*scale);c.height=Math.round(img.height*scale);c.getContext('2d').drawImage(img,0,0,c.width,c.height);
  let data=c.toDataURL('image/jpeg',.55); await niPhotoApi({photoAction:'upload',data,photoType:'progress',note:''}); await renderPhotos(); alert('Фото сохранено.');
  }catch(err){alert(err.message)} };img.src=r.result};r.readAsDataURL(f);e.target.value=''}}
