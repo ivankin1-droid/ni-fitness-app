@@ -38,6 +38,7 @@ async function openClient(id){
  
  $('#clientDetail').innerHTML=`<span class="eyebrow">CLIENT</span><h2>${c.first_name||'Клиент'} ${c.last_name||''}</h2>
  <div class="profile-summary">Telegram ID: <b>${c.telegram_id}</b><br>@${c.username||'—'}</div>
+
  <div class="admin-tabs" id="clientTabs">
    <button type="button" class="admin-tab active" data-tab="access">Доступ</button>
    <button type="button" class="admin-tab" data-tab="nutrition">Питание</button>
@@ -45,50 +46,64 @@ async function openClient(id){
    <button type="button" class="admin-tab" data-tab="checkins">Чек-ины</button>
    <button type="button" class="admin-tab" data-tab="requests">Запросы</button>
  </div>
+
  <div class="admin-tab-panel active" data-panel="access">
- <label>Тариф
-   <select id="adminTariff">
-     <option value="690" ${String(c.tariff_code)==='690'?'selected':''}>START · 690 ₽</option>
-     <option value="1490" ${String(c.tariff_code)==='1490'?'selected':''}>PRO · 1490 ₽</option>
-     <option value="2990" ${String(c.tariff_code)==='2990'?'selected':''}>PREMIUM · 2990 ₽</option>
-   </select>
- </label>
- <label>Назначенный план<select id="adminKcal">${[1200,1500,1800,2000,2200,2500,3000,3200,3500,4000].map(k=>`<option ${Number(c.assigned_kcal)===k?'selected':''}>${k}</option>`).join('')}</select></label>
- <label class="switch-row"><span>Подписка активна</span><input id="adminSubActive" type="checkbox" ${c.subscription_active?'checked':''}></label>
- <label>Доступ до<input id="adminSubUntil" type="date" value="${c.subscription_until?c.subscription_until.slice(0,10):''}"></label>
- <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0 14px">
-   <button type="button" id="access30">+ 30 дней</button>
-   <button type="button" id="access90">+ 90 дней</button>
+   <label>Тариф
+     <select id="adminTariff">
+       <option value="690" ${String(c.tariff_code)==='690'?'selected':''}>START · 690 ₽</option>
+       <option value="1490" ${String(c.tariff_code)==='1490'?'selected':''}>PRO · 1490 ₽</option>
+       <option value="2990" ${String(c.tariff_code)==='2990'?'selected':''}>PREMIUM · 2990 ₽</option>
+     </select>
+   </label>
+   <label>Назначенный план<select id="adminKcal">${[1200,1500,1800,2000,2200,2500,3000,3200,3500,4000].map(k=>`<option ${Number(c.assigned_kcal)===k?'selected':''}>${k}</option>`).join('')}</select></label>
+   <label class="switch-row"><span>Подписка активна</span><input id="adminSubActive" type="checkbox" ${c.subscription_active?'checked':''}></label>
+   <label>Доступ до<input id="adminSubUntil" type="date" value="${c.subscription_until?c.subscription_until.slice(0,10):''}"></label>
+   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0 14px">
+     <button type="button" id="access30">+ 30 дней</button>
+     <button type="button" id="access90">+ 90 дней</button>
+   </div>
+   <div class="detail-section"><h4>Материалы</h4>
+     ${['nutrition','products','protein','goals','labels'].map(x=>`<label class="switch-row"><span>${x}</span><input type="checkbox" data-mat="${x}" ${(c.allowed_materials||[]).includes(x)?'checked':''}></label>`).join('')}
+   </div>
+   <button class="primary wide" id="saveClientAccess">Сохранить доступ</button>
  </div>
- <div class="detail-section"><h4>Материалы</h4>
- ${['nutrition','products','protein','goals','labels'].map(x=>`<label class="switch-row"><span>${x}</span><input type="checkbox" data-mat="${x}" ${(c.allowed_materials||[]).includes(x)?'checked':''}></label>`).join('')}
+
+ <div class="admin-tab-panel" data-panel="nutrition">
+   <div class="detail-section"><h4>Корректировка питания</h4>
+     <label>Новая калорийность<select id="adjustKcal">${[1200,1500,1800,2000,2200,2500,3000,3200,3500,4000].map(k=>`<option ${Number(c.assigned_kcal)===k?'selected':''}>${k}</option>`).join('')}</select></label>
+     <label>Комментарий клиенту<textarea id="adjustComment" placeholder="Например: на ближайшие 2 недели снижаем до 2000 ккал."></textarea></label>
+     <label>Действует с<input id="adjustDate" type="date" value="${new Date().toISOString().slice(0,10)}"></label>
+     <button class="primary wide" id="saveNutritionAdjustment">Сохранить корректировку</button>
+   </div>
+   <div class="detail-section"><h4>История корректировок</h4>
+     <div id="adjustmentHistory">${history.length?history.map(a=>`<div class="notice"><b>${a.old_kcal||'—'} → ${a.new_kcal||'—'} ккал</b><br><small>${a.effective_from?new Date(a.effective_from+'T00:00:00').toLocaleDateString('ru-RU'):''}</small><br>${a.trainer_comment||'Без комментария'}<button type="button" class="wide admin-delete-adjustment" data-id="${a.id}" style="margin-top:8px">Удалить корректировку</button></div>`).join(''):'<div class="notice">Корректировок пока нет.</div>'}</div>
+   </div>
  </div>
- <div class="detail-section admin-engagement"><h4>Запросы на замену</h4>
-   <div>${(engagement.replacements||[]).length?(engagement.replacements||[]).map(r=>`<div class="notice"><b>${r.request_type==='food'?'Продукт':'Упражнение'} · ${r.current_item||'—'}</b><br>${r.reason||''}${r.trainer_reply?`<div class="trainer-feedback"><b>Твой ответ</b><p>${r.trainer_reply}</p></div>`:`<textarea data-rep-feedback="${r.id}" placeholder="Ответ клиенту"></textarea><button class="wide admin-rep-reply" data-id="${r.id}">Ответить</button>`}<button type="button" class="wide admin-delete-replacement" data-id="${r.id}" style="margin-top:8px">Удалить запрос</button></div>`).join(''):'<div class="notice">Запросов пока нет.</div>'}</div>
+
+ <div class="admin-tab-panel" data-panel="training">
+   <div class="detail-section"><h4>Тренировочный план</h4>
+     <p class="muted">Назначь клиенту тренировочные дни. Упражнения вводятся построчно.</p>
+     <label>Название плана<input id="trainingPlanName" placeholder="Например: PRO · 3 тренировки"></label>
+     <label>Комментарий тренера<textarea id="trainingComment" placeholder="Фокус недели, техника, ограничения..."></textarea></label>
+     <div id="trainingDaysEditor"></div>
+     <button type="button" class="wide" id="addTrainingDay">+ Добавить тренировочный день</button>
+     <button class="primary wide" id="saveTrainingPlan">Сохранить тренировочный план</button>
+   </div>
+   <div class="detail-section"><h4>История тренировочных планов</h4><div id="trainingHistory"><div class="notice">Загрузка…</div></div></div>
  </div>
- <div class="detail-section admin-engagement"><h4>Еженедельные чек-ины</h4>
-   <div>${(engagement.checkins||[]).length?(engagement.checkins||[]).map(w=>`<div class="notice"><b>${w.created_at?new Date(w.created_at).toLocaleDateString('ru-RU'):'—'} · вес ${w.weight||'—'} кг</b><br>Питание ${w.nutrition_score||'—'}/10 · тренировок ${w.workouts_done||0} · сон ${w.sleep||'—'}/10 · самочувствие ${w.wellbeing||'—'}/10<br>${w.successes?`<br><b>Получилось:</b> ${w.successes}`:''}${w.difficulties?`<br><b>Сложности:</b> ${w.difficulties}`:''}${w.question?`<br><b>Вопрос:</b> ${w.question}`:''}${w.trainer_reply?`<div class="trainer-feedback"><b>Твой ответ</b><p>${w.trainer_reply}</p></div>`:`<textarea data-week-feedback="${w.id}" placeholder="Ответ клиенту"></textarea><button class="wide admin-week-reply" data-id="${w.id}">Ответить</button>`}<button type="button" class="wide admin-delete-weekly" data-id="${w.id}" style="margin-top:8px">Удалить чек-ин</button></div>`).join(''):'<div class="notice">Чек-инов пока нет.</div>'}</div>
+
+ <div class="admin-tab-panel" data-panel="checkins">
+   <div class="detail-section admin-engagement"><h4>Еженедельные чек-ины</h4>
+     <div>${(engagement.checkins||[]).length?(engagement.checkins||[]).map(w=>`<div class="notice"><b>${w.created_at?new Date(w.created_at).toLocaleDateString('ru-RU'):'—'} · вес ${w.weight||'—'} кг</b><br>Питание ${w.nutrition_score||'—'}/10 · тренировок ${w.workouts_done||0} · сон ${w.sleep||'—'}/10 · самочувствие ${w.wellbeing||'—'}/10<br>${w.successes?`<br><b>Получилось:</b> ${w.successes}`:''}${w.difficulties?`<br><b>Сложности:</b> ${w.difficulties}`:''}${w.question?`<br><b>Вопрос:</b> ${w.question}`:''}${w.trainer_reply?`<div class="trainer-feedback"><b>Твой ответ</b><p>${w.trainer_reply}</p></div>`:`<textarea data-week-feedback="${w.id}" placeholder="Ответ клиенту"></textarea><button class="wide admin-week-reply" data-id="${w.id}">Ответить</button>`}<button type="button" class="wide admin-delete-weekly" data-id="${w.id}" style="margin-top:8px">Удалить чек-ин</button></div>`).join(''):'<div class="notice">Чек-инов пока нет.</div>'}</div>
+   </div>
  </div>
- <div class="detail-section"><h4>Корректировка питания</h4>
-   <label>Новая калорийность<select id="adjustKcal">${[1200,1500,1800,2000,2200,2500,3000,3200,3500,4000].map(k=>`<option ${Number(c.assigned_kcal)===k?'selected':''}>${k}</option>`).join('')}</select></label>
-   <label>Комментарий клиенту<textarea id="adjustComment" placeholder="Например: на ближайшие 2 недели снижаем до 2000 ккал. Белок держим стабильно, углеводы распределяем вокруг тренировки."></textarea></label>
-   <label>Действует с<input id="adjustDate" type="date" value="${new Date().toISOString().slice(0,10)}"></label>
-   <button class="primary wide" id="saveNutritionAdjustment">Сохранить корректировку</button>
- </div>
- <div class="detail-section"><h4>История корректировок</h4>
-   <div id="adjustmentHistory">${history.length?history.map(a=>`<div class="notice"><b>${a.old_kcal||'—'} → ${a.new_kcal||'—'} ккал</b><br><small>${a.effective_from?new Date(a.effective_from+'T00:00:00').toLocaleDateString('ru-RU'):''}</small><br>${a.trainer_comment||'Без комментария'}<button type="button" class="wide admin-delete-adjustment" data-id="${a.id}" style="margin-top:8px">Удалить корректировку</button></div>`).join(''):'<div class="notice">Корректировок пока нет.</div>'}</div>
- </div>
- <div class="detail-section"><h4>Тренировочный план</h4>
-   <p class="muted">Назначь клиенту тренировочные дни. Упражнения вводятся построчно.</p>
-   <label>Название плана<input id="trainingPlanName" placeholder="Например: PRO · 3 тренировки"></label>
-   <label>Комментарий тренера<textarea id="trainingComment" placeholder="Фокус недели, техника, ограничения..."></textarea></label>
-   <div id="trainingDaysEditor"></div>
-   <button type="button" class="wide" id="addTrainingDay">+ Добавить тренировочный день</button>
-   <button class="primary wide" id="saveTrainingPlan">Сохранить тренировочный план</button>
- </div>
- <div class="detail-section"><h4>История тренировочных планов</h4><div id="trainingHistory"><div class="notice">Загрузка…</div></div></div>
- <button class="primary wide" id="saveClientAccess">Сохранить доступ</button>`;
- $('#clientModal').classList.add('open');
+
+ <div class="admin-tab-panel" data-panel="requests">
+   <div class="detail-section admin-engagement"><h4>Запросы на замену</h4>
+     <div>${(engagement.replacements||[]).length?(engagement.replacements||[]).map(r=>`<div class="notice"><b>${r.request_type==='food'?'Продукт':'Упражнение'} · ${r.current_item||'—'}</b><br>${r.reason||''}${r.trainer_reply?`<div class="trainer-feedback"><b>Твой ответ</b><p>${r.trainer_reply}</p></div>`:`<textarea data-rep-feedback="${r.id}" placeholder="Ответ клиенту"></textarea><button class="wide admin-rep-reply" data-id="${r.id}">Ответить</button>`}<button type="button" class="wide admin-delete-replacement" data-id="${r.id}" style="margin-top:8px">Удалить запрос</button></div>`).join(''):'<div class="notice">Запросов пока нет.</div>'}</div>
+   </div>
+ </div>`;
+  $('#clientModal').classList.add('open');
  $$('.admin-rep-reply').forEach(b=>b.onclick=async()=>{const feedback=document.querySelector(`[data-rep-feedback="${b.dataset.id}"]`).value.trim();if(!feedback)return alert('Напиши ответ.');try{await post('/api/admin-review',{action:'replacement-response',id:b.dataset.id,feedback});await openClient(c.telegram_id)}catch(e){alert(e.message)}});
  $$('.admin-week-reply').forEach(b=>b.onclick=async()=>{const feedback=document.querySelector(`[data-week-feedback="${b.dataset.id}"]`).value.trim();if(!feedback)return alert('Напиши ответ.');try{await post('/api/admin-review',{action:'weekly-response',id:b.dataset.id,feedback});await openClient(c.telegram_id)}catch(e){alert(e.message)}});
  $$('.admin-delete-replacement').forEach(b=>b.onclick=async()=>{if(!confirm('Удалить этот запрос на замену?'))return;try{await post('/api/admin-review',{action:'delete-replacement',id:b.dataset.id});await openClient(c.telegram_id)}catch(e){alert(e.message)}});
@@ -294,11 +309,11 @@ readTrainingDays=function(){
 
 /* ===== ADMIN TABS ===== */
 document.addEventListener('click',e=>{
- const btn=e.target.closest('.admin-tab');
- if(!btn)return;
- const root=document.querySelector('#clientDetail');
- if(!root||!root.contains(btn))return;
- const tab=btn.dataset.tab;
- root.querySelectorAll('.admin-tab').forEach(x=>x.classList.toggle('active',x===btn));
- root.querySelectorAll('.admin-tab-panel').forEach(p=>p.classList.toggle('active',p.dataset.panel===tab));
+  const btn=e.target.closest('.admin-tab');
+  if(!btn)return;
+  const root=document.querySelector('#clientDetail');
+  if(!root || !root.contains(btn))return;
+  const tab=btn.dataset.tab;
+  root.querySelectorAll('.admin-tab').forEach(x=>x.classList.toggle('active',x===btn));
+  root.querySelectorAll('.admin-tab-panel').forEach(p=>p.classList.toggle('active',p.dataset.panel===tab));
 });
