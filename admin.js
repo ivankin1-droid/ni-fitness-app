@@ -28,9 +28,10 @@ function renderClients(){
 }
 async function openClient(id){
  const c=CLIENTS.find(x=>String(x.telegram_id)===String(id));if(!c)return;
- let history=[],progressPhotos=[];
+ let history=[],progressPhotos=[],engagement={replacements:[],checkins:[]};
  try{const h=await post('/api/admin-adjustments',{telegramId:c.telegram_id,action:'list'});history=h.adjustments||[]}catch(e){}
- try{const ph=await post('/api/training-plan',{photoAction:'admin-list',telegramId:c.telegram_id});progressPhotos=ph.photos||[]}catch(e){}
+ try{engagement=await post('/api/admin-review',{action:'engagement-list',telegramId:c.telegram_id})}catch(e){}
+ 
  $('#clientDetail').innerHTML=`<span class="eyebrow">CLIENT</span><h2>${c.first_name||'Клиент'} ${c.last_name||''}</h2>
  <div class="profile-summary">Telegram ID: <b>${c.telegram_id}</b><br>@${c.username||'—'}</div>
  <label>Назначенный план<select id="adminKcal">${[1200,1500,1800,2000,2200,2500,3000,3200,3500,4000].map(k=>`<option ${Number(c.assigned_kcal)===k?'selected':''}>${k}</option>`).join('')}</select></label>
@@ -39,11 +40,11 @@ async function openClient(id){
  <div class="detail-section"><h4>Материалы</h4>
  ${['nutrition','products','protein','goals','labels'].map(x=>`<label class="switch-row"><span>${x}</span><input type="checkbox" data-mat="${x}" ${(c.allowed_materials||[]).includes(x)?'checked':''}></label>`).join('')}
  </div>
- <div class="detail-section"><h4>Фото прогресса</h4>
-   <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
-   ${progressPhotos.length?progressPhotos.map((p,i)=>`<button type="button" class="admin-progress-photo" data-photo="${i}" style="padding:0;border:0;background:none;text-align:left"><img src="${p.url}" style="width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:14px"><small>${p.created_at?new Date(p.created_at).toLocaleDateString('ru-RU'):''}</small></button>`).join(''):'<div class="notice">Клиент ещё не загружал фото.</div>'}
-   </div>
-   ${progressPhotos.length>1?'<button type="button" class="wide" id="compareProgressPhotos">Сравнить первое / последнее</button>':''}
+ <div class="detail-section admin-engagement"><h4>Запросы на замену</h4>
+   <div>${(engagement.replacements||[]).length?(engagement.replacements||[]).map(r=>`<div class="notice"><b>${r.request_type==='food'?'Продукт':'Упражнение'} · ${r.current_item||'—'}</b><br>${r.reason||''}${r.trainer_reply?`<div class="trainer-feedback"><b>Твой ответ</b><p>${r.trainer_reply}</p></div>`:`<textarea data-rep-feedback="${r.id}" placeholder="Ответ клиенту"></textarea><button class="wide admin-rep-reply" data-id="${r.id}">Ответить</button>`}</div>`).join(''):'<div class="notice">Запросов пока нет.</div>'}</div>
+ </div>
+ <div class="detail-section admin-engagement"><h4>Еженедельные чек-ины</h4>
+   <div>${(engagement.checkins||[]).length?(engagement.checkins||[]).map(w=>`<div class="notice"><b>${w.created_at?new Date(w.created_at).toLocaleDateString('ru-RU'):'—'} · вес ${w.weight||'—'} кг</b><br>Питание ${w.nutrition_score||'—'}/10 · тренировок ${w.workouts_done||0} · сон ${w.sleep||'—'}/10 · самочувствие ${w.wellbeing||'—'}/10<br>${w.successes?`<br><b>Получилось:</b> ${w.successes}`:''}${w.difficulties?`<br><b>Сложности:</b> ${w.difficulties}`:''}${w.question?`<br><b>Вопрос:</b> ${w.question}`:''}${w.trainer_reply?`<div class="trainer-feedback"><b>Твой ответ</b><p>${w.trainer_reply}</p></div>`:`<textarea data-week-feedback="${w.id}" placeholder="Ответ клиенту"></textarea><button class="wide admin-week-reply" data-id="${w.id}">Ответить</button>`}</div>`).join(''):'<div class="notice">Чек-инов пока нет.</div>'}</div>
  </div>
  <div class="detail-section"><h4>Корректировка питания</h4>
    <label>Новая калорийность<select id="adjustKcal">${[1200,1500,1800,2000,2200,2500,3000,3200,3500,4000].map(k=>`<option ${Number(c.assigned_kcal)===k?'selected':''}>${k}</option>`).join('')}</select></label>
@@ -65,11 +66,9 @@ async function openClient(id){
  <div class="detail-section"><h4>История тренировочных планов</h4><div id="trainingHistory"><div class="notice">Загрузка…</div></div></div>
  <button class="primary wide" id="saveClientAccess">Сохранить доступ</button>`;
  $('#clientModal').classList.add('open');
- $$('.admin-progress-photo').forEach(b=>b.onclick=()=>{const p=progressPhotos[+b.dataset.photo];window.open(p.url,'_blank')});
- if($('#compareProgressPhotos')) $('#compareProgressPhotos').onclick=()=>{
-   const first=progressPhotos[progressPhotos.length-1],last=progressPhotos[0];
-   const w=window.open('','_blank'); if(w)w.document.write(`<meta name="viewport" content="width=device-width"><body style="margin:0;background:#111;color:#fff;font-family:sans-serif"><h2 style="padding:12px">До / сейчас</h2><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px"><div><img src="${first.url}" style="width:100%"><p style="padding:8px">${new Date(first.created_at).toLocaleDateString('ru-RU')}</p></div><div><img src="${last.url}" style="width:100%"><p style="padding:8px">${new Date(last.created_at).toLocaleDateString('ru-RU')}</p></div></div></body>`);
- };
+ $$('.admin-rep-reply').forEach(b=>b.onclick=async()=>{const feedback=document.querySelector(`[data-rep-feedback="${b.dataset.id}"]`).value.trim();if(!feedback)return alert('Напиши ответ.');try{await post('/api/admin-review',{action:'replacement-response',id:b.dataset.id,feedback});await openClient(c.telegram_id)}catch(e){alert(e.message)}});
+ $$('.admin-week-reply').forEach(b=>b.onclick=async()=>{const feedback=document.querySelector(`[data-week-feedback="${b.dataset.id}"]`).value.trim();if(!feedback)return alert('Напиши ответ.');try{await post('/api/admin-review',{action:'weekly-response',id:b.dataset.id,feedback});await openClient(c.telegram_id)}catch(e){alert(e.message)}});
+
 
  let trainingPlans=[];
  try{
