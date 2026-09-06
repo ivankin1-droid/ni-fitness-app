@@ -2,26 +2,85 @@
 /* NI FITNESS v5.2 PATCH */
 const D=window.NI_DATA,$=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const S=JSON.parse(localStorage.getItem('ni_state_v5')||localStorage.getItem('ni_state_v4')||'{}');S.kcal=S.kcal||1500;S.water=Number.isFinite(S.water)?S.water:1.25;S.done=S.done||{};S.portions=S.portions||{};S.replacements=S.replacements||{};S.measurements=S.measurements||[];S.photos=S.photos||[];S.profile=S.profile||{name:'',goal:'Снижение веса',height:'',weight:'',waterGoal:2};S.assignedKcal=S.assignedKcal||S.kcal||1500;S.kcal=S.assignedKcal;S.monthlyReviews=S.monthlyReviews||[];S.subscription=S.subscription||{active:true,tier:'NI FITNESS'};const save=()=>localStorage.setItem('ni_state_v5',JSON.stringify(S));
-const today=()=>new Date().toISOString().slice(0,10);
-const DAILY_SWAPS=[
- {'Куриная грудка готовая':'Индейка готовая','Гречка готовая':'Рис готовый','Яблоко':'Ягоды'},
- {'Индейка готовая':'Куриная грудка готовая','Рис готовый':'Гречка готовая','Треска/хек готовые':'Креветки готовые'},
- {'Овсяные хлопья':'Гречневые хлопья','Ягоды':'Банан','Куриная грудка готовая':'Треска/хек готовые'},
- {'Гречка готовая':'Картофель отварной','Треска/хек готовые':'Индейка готовая','Яблоко':'Груша'},
- {'Рис готовый':'Булгур готовый','Куриная грудка готовая':'Индейка готовая','Ягоды':'Киви'},
- {'Овсяные хлопья':'Рисовые хлопья','Творог 5%':'Йогурт греческий 2%','Треска/хек готовые':'Куриная грудка готовая'},
- {'Гречка готовая':'Рис готовый','Куриная грудка готовая':'Индейка готовая','Яблоко':'Апельсин'}
-];
-function dayIndex(){const d=new Date();return (d.getDay()+6)%7}
-const plan=()=>{const p=JSON.parse(JSON.stringify(D.plans[String(S.kcal)]||D.plans['1500']));const swaps=DAILY_SWAPS[dayIndex()]||{};p.forEach(m=>{m.ingredients=m.ingredients.map(x=>swaps[x.name]?{...x,name:swaps[x.name]}:x);const main=m.ingredients.slice(0,2).map(x=>x.name).join(' + ');if(main)m.name=main});return p};
-const mkey=i=>`${today()}_${S.kcal}_${i}`;
-function effectiveMeal(i){let m=plan()[i],rep=S.replacements[mkey(i)]||{};m.ingredients=m.ingredients.map((x,idx)=>rep[idx]?{...x,name:rep[idx]}:x);let factor=(S.portions[mkey(i)]||100)/100;m.effectiveKcal=Math.round(m.kcal*factor);m.effectiveProtein=Math.round(m.protein*factor*10)/10;m.effectiveGrams=Math.round(m.grams*factor);return m}
+function localISO(date=new Date()){
+ const y=date.getFullYear(),m=String(date.getMonth()+1).padStart(2,'0'),d=String(date.getDate()).padStart(2,'0');
+ return `${y}-${m}-${d}`;
+}
+const today=()=>localISO();
 
-function mealHTML(_,i){let m=effectiveMeal(i),done=!!S.done[mkey(i)],portion=S.portions[mkey(i)]||100;return `<div class="meal ${done?'done':''}"><div class="time">${m.time}</div><div><h3>${m.name}</h3><p>${m.effectiveKcal} ккал · ${m.effectiveProtein} г белка · ${m.effectiveGrams} г</p><span class="portion-badge">съедено ${portion}%</span></div><div class="meal-actions"><button class="check" data-meal="${i}">${done?'✓':'○'}</button><button class="mini" data-editmeal="${i}">Количество</button></div></div>`}
-function renderMeals(){let p=plan(),html=p.map(mealHTML).join('');$('#homeMeals').innerHTML=html;$('#nutritionMeals').innerHTML=html;let eaten=0,protein=0,count=0;p.forEach((m,i)=>{if(S.done[mkey(i)]){let e=effectiveMeal(i);eaten+=e.effectiveKcal;protein+=e.effectiveProtein;count++}});$('#eatenKcal').textContent=Math.round(eaten);$('#eatenProtein').textContent=Math.round(protein)+' г';$('#mealProgress').textContent=count+'/'+p.length;$$('[data-meal]').forEach(b=>b.onclick=()=>{let k=mkey(+b.dataset.meal);S.done[k]=!S.done[k];save();renderAll()});$$('[data-editmeal]').forEach(b=>b.onclick=()=>openMeal(+b.dataset.editmeal))}
-function openMeal(i){let m=effectiveMeal(i),portion=S.portions[mkey(i)]||100;$('#mealDetail').innerHTML=`<span class="eyebrow">${m.time}</span><h2>${m.name}</h2><div class="ingredient-list">${m.ingredients.map((x,idx)=>`<div class="ingredient-row"><div><b>${x.name}</b><small>${x.grams} г по плану</small></div><button class="mini" data-replace="${i}:${idx}">Заменить</button></div>`).join('')}</div><div class="detail-section"><h4>Сколько фактически съедено?</h4><p>100% = вся запланированная порция (${m.grams} г). Можно указать меньше или больше.</p><div class="amount-line"><input id="portionInput" type="number" min="0" max="300" value="${portion}"><span>% порции</span><button class="primary" id="savePortion">Сохранить</button></div></div>`;$('#mealModal').classList.add('open');$('#savePortion').onclick=()=>{S.portions[mkey(i)]=Math.max(0,Math.min(300,+$('#portionInput').value||0));save();$('#mealModal').classList.remove('open');renderAll()};$$('[data-replace]').forEach(b=>b.onclick=()=>{let [mi,ii]=b.dataset.replace.split(':').map(Number);openReplace(mi,ii)})}
-function openReplace(mi,ii){let m=effectiveMeal(mi),ing=m.ingredients[ii],opts=D.replacements[ing.name]||['Рис готовый','Гречка готовая','Куриная грудка готовая','Индейка готовая','Треска/хек готовые','Йогурт греческий 2%','Ягоды'];$('#replaceDetail').innerHTML=`<div class="profile-summary">Сейчас: <b>${ing.name}</b> · ${ing.grams} г</div><div class="replace-options">${opts.filter(x=>x!==ing.name).map(x=>`<button data-choice="${x}">${x}</button>`).join('')}</div><div class="detail-section"><p>Замена меняет продукт внутри этого приёма пищи. Количество остаётся ориентировочно тем же; точную эквивалентность по калориям лучше проверять индивидуально.</p></div><button class="request-own" id="requestOwnFood">Не подходит? Запросить замену у Никиты</button>`;$('#replaceModal').classList.add('open');$$('[data-choice]').forEach(b=>b.onclick=()=>{let k=mkey(mi);S.replacements[k]=S.replacements[k]||{};S.replacements[k][ii]=b.dataset.choice;save();$('#replaceModal').classList.remove('open');$('#mealModal').classList.remove('open');renderAll()});const rb=$('#requestOwnFood');if(rb)rb.onclick=()=>openReplacementRequest('food',ing.name)}
-function shopping(){let map={};for(let i=0;i<plan().length;i++){let m=effectiveMeal(i);m.ingredients.forEach(x=>map[x.name]=(map[x.name]||0)+x.grams*7)}$('#shoppingList').innerHTML=Object.entries(map).sort().map(([n,g])=>`<div class="shop-row"><b>${n}</b><span>${g>=1000?(g/1000).toFixed(2).replace(/\.00$/,'')+' кг':Math.round(g)+' г'}</span></div>`).join('')}
+function planDayIndex(offset=0){
+ if(!S.planStartDate){S.planStartDate=today();save()}
+ const start=new Date(S.planStartDate+'T12:00:00');
+ const now=new Date();now.setHours(12,0,0,0);
+ const elapsed=Math.floor((now-start)/86400000)+Number(offset||0);
+ return ((elapsed%30)+30)%30;
+}
+function planSource(offset=0){
+ const source=D.plans[String(S.kcal)]||D.plans['1500']||[];
+ if(!Array.isArray(source)||!source.length)return [];
+ // New format: 30 day objects. Backward compatible with the old one-day meal array.
+ if(source[0]&&Array.isArray(source[0].meals)){
+   const day=source[planDayIndex(offset)]||source[0];
+   return day.meals||[];
+ }
+ return source;
+}
+const plan=()=>JSON.parse(JSON.stringify(planSource(0))).sort((a,b)=>String(a.time||'').localeCompare(String(b.time||'')));
+const mkey=i=>`${today()}_${S.kcal}_${i}`;
+
+function effectiveMeal(i){
+ let m=plan()[i];
+ if(!m)return {time:'',name:'',ingredients:[],kcal:0,protein:0,grams:0,effectiveKcal:0,effectiveProtein:0,effectiveGrams:0};
+ const rep=S.replacements[mkey(i)]||{};
+ m.ingredients=(m.ingredients||[]).map((x,idx)=>rep[idx]?{...x,name:rep[idx]}:x);
+ if(Object.keys(rep).length){
+   const changed=m.ingredients.slice(0,2).map(x=>x.name).filter(Boolean).join(' + ');
+   if(changed)m.name=changed;
+ }
+ let factor=(S.portions[mkey(i)]||100)/100;
+ m.effectiveKcal=Math.round((Number(m.kcal)||0)*factor);
+ m.effectiveProtein=Math.round((Number(m.protein)||0)*factor*10)/10;
+ m.effectiveGrams=Math.round((Number(m.grams)||0)*factor);
+ return m
+}
+
+function mealHTML(_,i){
+ let m=effectiveMeal(i),done=!!S.done[mkey(i)],portion=S.portions[mkey(i)]||100;
+ return `<div class="meal ${done?'done':''}"><div class="time">${m.time}</div><div><h3>${m.name}</h3><p>${m.effectiveKcal} ккал · ${m.effectiveProtein} г белка · ${m.effectiveGrams} г</p><span class="portion-badge">съедено ${portion}%</span></div><div class="meal-actions"><button class="check" data-meal="${i}">${done?'✓':'○'}</button><button class="mini" data-editmeal="${i}">Количество</button></div></div>`
+}
+function renderMeals(){
+ let p=plan(),html=p.map(mealHTML).join('');
+ $('#homeMeals').innerHTML=html;$('#nutritionMeals').innerHTML=html;
+ let eaten=0,protein=0,count=0;
+ p.forEach((m,i)=>{if(S.done[mkey(i)]){let e=effectiveMeal(i);eaten+=e.effectiveKcal;protein+=e.effectiveProtein;count++}});
+ $('#eatenKcal').textContent=Math.round(eaten);
+ $('#eatenProtein').textContent=Math.round(protein)+' г';
+ $('#mealProgress').textContent=count+'/'+p.length;
+ $$('[data-meal]').forEach(b=>b.onclick=()=>{let k=mkey(+b.dataset.meal);S.done[k]=!S.done[k];save();renderAll()});
+ $$('[data-editmeal]').forEach(b=>b.onclick=()=>openMeal(+b.dataset.editmeal))
+}
+function openMeal(i){
+ let m=effectiveMeal(i),portion=S.portions[mkey(i)]||100;
+ $('#mealDetail').innerHTML=`<span class="eyebrow">${m.time}</span><h2>${m.name}</h2><div class="ingredient-list">${m.ingredients.map((x,idx)=>`<div class="ingredient-row"><div><b>${x.name}</b><small>${x.grams} г по плану</small></div><button class="mini" data-replace="${i}:${idx}">Заменить</button></div>`).join('')}</div>${m.recipe?`<div class="detail-section"><h4>Как приготовить</h4><p>${m.recipe}</p></div>`:''}<div class="detail-section"><h4>Сколько фактически съедено?</h4><p>100% = вся запланированная порция (${m.grams} г). Можно указать меньше или больше.</p><div class="amount-line"><input id="portionInput" type="number" min="0" max="300" value="${portion}"><span>% порции</span><button class="primary" id="savePortion">Сохранить</button></div></div>`;
+ $('#mealModal').classList.add('open');
+ $('#savePortion').onclick=()=>{S.portions[mkey(i)]=Math.max(0,Math.min(300,+$('#portionInput').value||0));save();$('#mealModal').classList.remove('open');renderAll()};
+ $$('[data-replace]').forEach(b=>b.onclick=()=>{let [mi,ii]=b.dataset.replace.split(':').map(Number);openReplace(mi,ii)})
+}
+function openReplace(mi,ii){
+ let m=effectiveMeal(mi),ing=m.ingredients[ii],opts=D.replacements[ing.name]||['Рис готовый','Гречка готовая','Куриная грудка готовая','Индейка готовая','Треска/хек готовые','Йогурт греческий 2%','Ягоды'];
+ $('#replaceDetail').innerHTML=`<div class="profile-summary">Сейчас: <b>${ing.name}</b> · ${ing.grams} г</div><div class="replace-options">${opts.filter(x=>x!==ing.name).map(x=>`<button data-choice="${x}">${x}</button>`).join('')}</div><div class="detail-section"><p>Замена меняет продукт внутри этого приёма пищи. После сохранения она сразу появится и на главном экране.</p></div><button class="request-own" id="requestOwnFood">Не подходит? Запросить замену у Никиты</button>`;
+ $('#replaceModal').classList.add('open');
+ $$('[data-choice]').forEach(b=>b.onclick=()=>{let k=mkey(mi);S.replacements[k]=S.replacements[k]||{};S.replacements[k][ii]=b.dataset.choice;save();$('#replaceModal').classList.remove('open');$('#mealModal').classList.remove('open');renderAll()});
+ const rb=$('#requestOwnFood');if(rb)rb.onclick=()=>openReplacementRequest('food',ing.name)
+}
+function shopping(){
+ let map={};
+ for(let offset=0;offset<7;offset++){
+   const meals=JSON.parse(JSON.stringify(planSource(offset)));
+   meals.forEach(m=>(m.ingredients||[]).forEach(x=>map[x.name]=(map[x.name]||0)+(Number(x.grams)||0)));
+ }
+ $('#shoppingList').innerHTML=Object.entries(map).sort().map(([n,g])=>`<div class="shop-row"><b>${n}</b><span>${g>=1000?(g/1000).toFixed(2).replace(/\.00$/,'')+' кг':Math.round(g)+' г'}</span></div>`).join('')
+}
 function renderWater(){let goal=+S.profile.waterGoal||2;$('#waterValue').textContent=S.water.toFixed(2).replace(/\.00$/,'');$('#waterGoalText').textContent=goal;$('#waterBar').style.width=Math.min(100,S.water/goal*100)+'%'}$('#waterPlus').onclick=()=>{S.water=Math.round((S.water+.25)*100)/100;save();renderWater()};$('#waterMinus').onclick=()=>{S.water=Math.max(0,Math.round((S.water-.25)*100)/100);save();renderWater()};
 function go(page){$$('.page').forEach(x=>x.classList.toggle('active',x.dataset.page===page));$$('.bottom-nav [data-goto]').forEach(x=>x.classList.toggle('active',x.dataset.goto===page));scrollTo({top:0,behavior:'smooth'})}$$('[data-goto]').forEach(b=>b.onclick=()=>go(b.dataset.goto));
 let currentGroup='Ноги';
@@ -125,7 +184,7 @@ function renderAll(){
   renderSubscription();
   const hero=$('#heroKcal'), title=$('#planTitle'), nk=$('#nutritionKcal');
   if(hero) hero.textContent=S.kcal;
-  if(title) title.textContent=S.kcal+' ккал';
+  if(title) title.textContent=S.kcal+' ккал · День '+(planDayIndex()+1)+' / 30';
   if(nk) nk.textContent=S.kcal;
   renderMeals();
   shopping();
@@ -312,8 +371,10 @@ function subscriptionIsActive(profile){
 function applyServerProfile(profile){
   SERVER_PROFILE=profile;
   S.server={ready:true,role:profile.role||'client',telegramId:profile.telegram_id,remote:true};
+  const previousAssignedKcal=Number(S.assignedKcal||S.kcal||0);
   S.assignedKcal=Number(profile.assigned_kcal||1500);
   S.kcal=S.assignedKcal;
+  if(!S.planStartDate || (previousAssignedKcal && previousAssignedKcal!==S.assignedKcal)) S.planStartDate=today();
   S.subscription=S.subscription||{};
   S.subscription.active=subscriptionIsActive(profile);
   S.subscription.until=profile.subscription_until||null;
@@ -621,4 +682,3 @@ function bindTodayQuickCards(){
   });
 }
 setTimeout(bindTodayQuickCards,2000);
-
