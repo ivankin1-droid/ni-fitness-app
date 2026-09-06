@@ -38,6 +38,14 @@ async function openClient(id){
  
  $('#clientDetail').innerHTML=`<span class="eyebrow">CLIENT</span><h2>${c.first_name||'Клиент'} ${c.last_name||''}</h2>
  <div class="profile-summary">Telegram ID: <b>${c.telegram_id}</b><br>@${c.username||'—'}</div>
+ <div class="admin-tabs" id="clientTabs">
+   <button type="button" class="admin-tab active" data-tab="access">Доступ</button>
+   <button type="button" class="admin-tab" data-tab="nutrition">Питание</button>
+   <button type="button" class="admin-tab" data-tab="training">Тренировки</button>
+   <button type="button" class="admin-tab" data-tab="checkins">Чек-ины</button>
+   <button type="button" class="admin-tab" data-tab="requests">Запросы</button>
+ </div>
+ <div class="admin-tab-panel active" data-panel="access">
  <label>Тариф
    <select id="adminTariff">
      <option value="690" ${String(c.tariff_code)==='690'?'selected':''}>START · 690 ₽</option>
@@ -68,7 +76,7 @@ async function openClient(id){
    <button class="primary wide" id="saveNutritionAdjustment">Сохранить корректировку</button>
  </div>
  <div class="detail-section"><h4>История корректировок</h4>
-   <div id="adjustmentHistory">${history.length?history.map(a=>`<div class="notice"><b>${a.old_kcal||'—'} → ${a.new_kcal||'—'} ккал</b><br><small>${a.effective_from?new Date(a.effective_from+'T00:00:00').toLocaleDateString('ru-RU'):''}</small><br>${a.trainer_comment||'Без комментария'}</div>`).join(''):'<div class="notice">Корректировок пока нет.</div>'}</div>
+   <div id="adjustmentHistory">${history.length?history.map(a=>`<div class="notice"><b>${a.old_kcal||'—'} → ${a.new_kcal||'—'} ккал</b><br><small>${a.effective_from?new Date(a.effective_from+'T00:00:00').toLocaleDateString('ru-RU'):''}</small><br>${a.trainer_comment||'Без комментария'}<button type="button" class="wide admin-delete-adjustment" data-id="${a.id}" style="margin-top:8px">Удалить корректировку</button></div>`).join(''):'<div class="notice">Корректировок пока нет.</div>'}</div>
  </div>
  <div class="detail-section"><h4>Тренировочный план</h4>
    <p class="muted">Назначь клиенту тренировочные дни. Упражнения вводятся построчно.</p>
@@ -135,6 +143,14 @@ async function openClient(id){
  };
  $('#access30').onclick=()=>setAccessDays(30);
  $('#access90').onclick=()=>setAccessDays(90);
+
+ $$('.admin-delete-adjustment').forEach(b=>b.onclick=async()=>{
+  if(!confirm('Удалить эту корректировку из истории?'))return;
+  try{
+    await post('/api/admin-adjustments',{telegramId:c.telegram_id,action:'delete',id:b.dataset.id});
+    await openClient(c.telegram_id);
+  }catch(e){alert(e.message)}
+ });
 
  $('#saveClientAccess').onclick=async()=>{
   const mats=$$('[data-mat]').filter(x=>x.checked).map(x=>x.dataset.mat);
