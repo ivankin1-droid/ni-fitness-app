@@ -1,168 +1,63 @@
-const { requireSession, requireAdmin, sb, json } = require('./_lib');
-
-const BUCKET='progress-photos';
-
-function storageCfg(){
-  const base=String(process.env.SUPABASE_URL||'').replace(/\/+$/,'');
-  const key=process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if(!base||!key) throw new Error('Supabase environment variables are missing');
-  return {base,key};
-}
-
-async function storageRequest(path,{method='POST',body,contentType='application/json'}={}){
-  const {base,key}=storageCfg();
-  const headers={
-    apikey:key,
-    Authorization:`Bearer ${key}`
-  };
-  if(contentType) headers['Content-Type']=contentType;
-
-  const r=await fetch(`${base}/storage/v1/${path}`,{
-    method,
-    headers,
-    body:body===undefined?undefined:(Buffer.isBuffer(body)?body:JSON.stringify(body))
-  });
-  const raw=await r.text();
-  let data=null;
-  if(raw){try{data=JSON.parse(raw)}catch{data=raw}}
-  if(!r.ok){
-    console.error('PHOTO_STORAGE_API_ERROR',r.status,data);
-    const msg=(data&&typeof data==='object'&&(data.message||data.error))||String(data||`Storage error ${r.status}`);
-    throw new Error(msg);
-  }
-  return data;
-}
-
-async function uploadPhoto(tid,dataUrl){
-  const m=String(dataUrl||'').match(/^data:image\/(?:jpeg|jpg|png|webp);base64,(.+)$/);
-  if(!m) throw new Error('Некорректное изображение.');
-
-  const buf=Buffer.from(m[1],'base64');
-  if(buf.length>3500000) throw new Error('Фото слишком большое.');
-
-  const objectPath=`${tid}/${Date.now()}-${Math.random().toString(36).slice(2,8)}.jpg`;
-  await storageRequest(`object/${BUCKET}/${objectPath}`,{
-    method:'POST',
-    body:buf,
-    contentType:'image/jpeg'
-  });
-  return objectPath;
-}
-
-async function listObjects(tid,limit=30){
-  const rows=await storageRequest(`object/list/${BUCKET}`,{
-    method:'POST',
-    body:{
-      prefix:`${tid}/`,
-      limit,
-      offset:0,
-      sortBy:{column:'created_at',order:'desc'}
-    }
-  });
-  return Array.isArray(rows)?rows:[];
-}
-
-async function makeSignedUrl(objectPath){
-  const j=await storageRequest(`object/sign/${BUCKET}/${objectPath}`,{
-    method:'POST',
-    body:{expiresIn:3600}
-  });
-  const u=j?.signedURL||j?.signedUrl;
-  if(!u) throw new Error('Не удалось получить ссылку на фото.');
-  const {base}=storageCfg();
-  return u.startsWith('http')?u:`${base}/storage/v1${u}`;
-}
-
-async function listPhotos(tid,limit=30){
-  const objects=await listObjects(tid,limit);
-  const photos=[];
-  for(const o of objects){
-    if(!o?.name) continue;
-    const objectPath=o.name.startsWith(`${tid}/`)?o.name:`${tid}/${o.name}`;
-    photos.push({
-      id:o.id||objectPath,
-      photo_path:objectPath,
-      created_at:o.created_at||o.updated_at||null,
-      url:await makeSignedUrl(objectPath)
-    });
-  }
-  return photos;
-}
-
+const { requireSession, subscriptionActive, sb, json } = require('./_lib');
+function mondayISO(){const d=new Date();const day=(d.getUTCDay()+6)%7;d.setUTCDate(d.getUTCDate()-day);return d.toISOString().slice(0,10)}
 module.exports=async function(req,res){
-  if(req.method!=='POST') return json(res,405,{error:'POST only'});
-
-  try{
-    const {profile}=await requireSession(req);
-
-    // Photo requests are deliberately separated from monthly-review action names.
-    const photoAction=String(req.body?.photoAction||'');
-
-    if(photoAction==='admin-list'){
-      requireAdmin(profile);
-      const tid=String(req.body?.telegramId||'');
-      if(!tid) return json(res,400,{error:'telegramId required'});
-      return json(res,200,{photos:await listPhotos(tid,50)});
-    }
-
-    if(photoAction==='list'){
-      return json(res,200,{photos:await listPhotos(String(profile.telegram_id),30)});
-    }
-
-    if(photoAction==='upload'){
-      const objectPath=await uploadPhoto(String(profile.telegram_id),req.body?.data);
-      return json(res,200,{
-        photo:{
-          photo_path:objectPath,
-          created_at:new Date().toISOString(),
-          url:await makeSignedUrl(objectPath)
-        }
-      });
-    }
-
-    // Original monthly-review API remains intact.
-    const action=String(req.body?.action||'mine');
-
-    if(action==='mine'){
-      const rows=await sb(
-        `monthly_reviews?telegram_id=eq.${encodeURIComponent(profile.telegram_id)}&select=*&order=created_at.desc&limit=12`
-      );
-      return json(res,200,{reviews:rows||[]});
-    }
-
-    if(action==='submit'){
-      const now=new Date();
-      const month=`${now.getUTCFullYear()}-${String(now.getUTCMonth()+1).padStart(2,'0')}`;
-
-      const existing=await sb(
-        `monthly_reviews?telegram_id=eq.${encodeURIComponent(profile.telegram_id)}&month=eq.${encodeURIComponent(month)}&select=id&limit=1`
-      );
-      if(Array.isArray(existing)&&existing.length){
-        return json(res,409,{error:'Отчёт за этот месяц уже отправлен.'});
-      }
-
-      const created=await sb('monthly_reviews',{
-        method:'POST',
-        prefer:'return=representation',
-        body:[{
-          telegram_id:String(profile.telegram_id),
-          month,
-          win:req.body?.win||null,
-          hard:req.body?.hard||null,
-          next:req.body?.next||null,
-          measurement:req.body?.measurement?JSON.stringify(req.body.measurement):null,
-          status:'pending',
-          trainer_feedback:null,
-          responded_at:null
-        }]
-      });
-
-      return json(res,200,{review:created&&created[0]});
-    }
-
-    return json(res,400,{error:'Unknown action'});
-  }catch(e){
-    console.error('MONTHLY_REVIEW_PHOTO_ERROR',e);
-    return json(res,400,{error:e.message||'Ошибка сервера'});
+ if(req.method!=='POST')return json(res,405,{error:'POST only'});
+ try{
+  const {profile}=await requireSession(req);
+  if(!subscriptionActive(profile)&&profile.role!=='admin'){
+    const demo=profile.demo_expires_at&&new Date(profile.demo_expires_at).getTime()>Date.now();
+    if(!demo)return json(res,403,{error:'Подписка не активна.'});
   }
+  const action=String(req.body?.action||'mine'),tid=String(profile.telegram_id);
+  if(action==='mine'){const rows=await sb(`monthly_reviews?telegram_id=eq.${encodeURIComponent(tid)}&select=*&order=created_at.desc&limit=12`);return json(res,200,{reviews:rows||[]})}
+  if(action==='submit'){
+   const now=new Date(),month=`${now.getUTCFullYear()}-${String(now.getUTCMonth()+1).padStart(2,'0')}-01`;
+   const existing=await sb(`monthly_reviews?telegram_id=eq.${encodeURIComponent(tid)}&month=eq.${month}&select=id&limit=1`);
+   if(existing?.length)return json(res,409,{error:'Отчёт за этот месяц уже отправлен.'});
+   const created=await sb('monthly_reviews',{method:'POST',prefer:'return=representation',body:[{telegram_id:tid,month,win:req.body?.win||'',hard:req.body?.hard||'',next:req.body?.next||'',measurement:req.body?.measurement||null,status:'на проверке'}]});
+   return json(res,200,{review:created?.[0]});
+  }
+  if(action==='replacement-list'){const rows=await sb(`replacement_requests?telegram_id=eq.${encodeURIComponent(tid)}&order=created_at.desc&limit=20`);return json(res,200,{requests:rows||[]})}
+  if(action==='replacement-create'){
+   const type=String(req.body?.requestType||'food'); if(!['food','exercise'].includes(type))return json(res,400,{error:'Некорректный тип запроса.'});
+   const msg=String(req.body?.message||'').trim(); if(!msg)return json(res,400,{error:'Напишите, что хотите заменить.'});
+   const rows=await sb('replacement_requests',{method:'POST',prefer:'return=representation',body:[{
+     telegram_id:tid,
+     request_type:type,
+     current_item:String(req.body?.currentItem||''),
+     reason:msg,
+     trainer_reply:null,
+     replacement_item:null,
+     status:'pending'
+   }]});
+   return json(res,200,{request:rows?.[0]});
+  }
+  if(action==='weekly-list'){
+   const rows=await sb(`weekly_checkins?telegram_id=eq.${encodeURIComponent(tid)}&order=created_at.desc&limit=12`);
+   return json(res,200,{checkins:rows||[]});
+  }
+  if(action==='weekly-submit'){
+   const now=new Date();
+   const day=(now.getUTCDay()+6)%7;
+   const monday=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()-day,0,0,0));
+   const mondayIso=monday.toISOString();
+   const ex=await sb(`weekly_checkins?telegram_id=eq.${encodeURIComponent(tid)}&created_at=gte.${encodeURIComponent(mondayIso)}&select=id&limit=1`);
+   if(ex?.length)return json(res,409,{error:'Чек-ин за эту неделю уже отправлен.'});
+   const rows=await sb('weekly_checkins',{method:'POST',prefer:'return=representation',body:[{
+     telegram_id:tid,
+     weight:req.body?.weight||null,
+     nutrition_score:Number(req.body?.nutritionScore)||null,
+     workouts_done:Number(req.body?.trainingCount)||0,
+     sleep:Number(req.body?.sleepScore)||null,
+     wellbeing:Number(req.body?.wellbeingScore)||null,
+     successes:String(req.body?.win||''),
+     difficulties:String(req.body?.hard||''),
+     question:String(req.body?.question||''),
+     trainer_reply:null,
+     status:'pending'
+   }]});
+   return json(res,200,{checkin:rows?.[0]});
+  }
+  return json(res,400,{error:'Unknown action'});
+ }catch(e){console.error('ENGAGEMENT_ERROR',e);return json(res,400,{error:e.message||'Ошибка сервера'})}
 };
