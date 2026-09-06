@@ -250,7 +250,7 @@ function applyTariffAccess(){
 
   // Training page/nav/quick access remain visible but open an upgrade prompt on START.
   $$('[data-goto="exercises"]').forEach(btn=>{
-    if(tariff.level<2 && !S.hasTrainingPlan){
+    if(tariff.level<2){
       btn.onclick=(e)=>{e.preventDefault();openUpgrade('training')};
       btn.classList.add('tier-locked');
     }else{
@@ -261,8 +261,11 @@ function applyTariffAccess(){
 
   const review=$('[data-feature="monthly-review"]');
   if(review){
-    // Отчёт тренеру доступен на всех активных тарифах, включая START.
-    review.classList.remove('feature-locked');
+    review.classList.toggle('feature-locked',tariff.level<2);
+    if(tariff.level<2){
+      review.innerHTML=`<span class="eyebrow">PRO FEATURE</span><h2>Ежемесячный разбор прогресса</h2><p>Отправка отчёта тренеру и обратная связь доступны в PRO и PREMIUM.</p><button class="primary wide" id="reviewUpgradeBtn">Перейти на PRO</button>`;
+      const b=$('#reviewUpgradeBtn'); if(b)b.onclick=()=>openUpgrade('monthly-review');
+    }
   }
 
   // START gets only the two foundational guides.
@@ -503,41 +506,12 @@ function openNIExercise(x){
 loadPersonalTrainingPlan=async function(){
  try{
   const r=await fetch('/api/training-plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({initData:window.Telegram?.WebApp?.initData||''})});
-  if(!r.ok)return;
-  const j=await r.json(),p=j.plan;if(!p)return;
-
-  S.hasTrainingPlan=true;save();
-
-  // Если Никита назначил персональный план — раздел тренировок открываем
-  // даже на START, но только для этого клиента.
-  $$('[data-goto="exercises"]').forEach(btn=>{
-    btn.onclick=()=>go('exercises');
-    btn.classList.remove('tier-locked');
-  });
-
+  if(!r.ok)return;const j=await r.json(),p=j.plan;if(!p)return;
   const page=document.querySelector('[data-page="exercises"]');if(!page)return;
-  let box=document.querySelector('#personalTrainingPlan');
-  if(!box){
-    box=document.createElement('div');
-    box.id='personalTrainingPlan';
-    (page.querySelector('.page-title')||page).insertAdjacentElement('afterend',box);
-  }
-
-  box.className='card';
-  box.innerHTML=`<span class="eyebrow">МОЙ ПЛАН</span>
-  <h2>${niEsc(p.plan_name||'Персональный план')}</h2>
-  ${p.trainer_comment?`<p class="muted">${niEsc(p.trainer_comment)}</p>`:''}
-  ${(p.days||[]).map((d,i)=>`<div class="detail-section">
-    <h4>${niEsc(d.title||`День ${i+1}`)}</h4>
-    ${(d.exercises||[]).map((x,k)=>`<button type="button" class="ni-client-ex" data-di="${i}" data-ei="${k}" style="display:block;width:100%;text-align:left;padding:12px;margin:7px 0;border:1px solid #303036;border-radius:14px;background:#18181b;color:#f4f2ed">
-      <b>${niEsc(x.name)}</b><br>
-      <small style="color:#999">${niEsc(x.sets)} подх. · ${niEsc(x.reps)} повт. · отдых ${niEsc(x.rest)}</small>
-    </button>`).join('')}
-  </div>`).join('')}`;
-
-  box.querySelectorAll('.ni-client-ex').forEach(b=>{
-    b.onclick=()=>openNIExercise(p.days[+b.dataset.di].exercises[+b.dataset.ei]);
-  });
+  let box=document.querySelector('#personalTrainingPlan');if(!box){box=document.createElement('div');box.id='personalTrainingPlan';(page.querySelector('.page-title')||page).insertAdjacentElement('afterend',box)}
+  box.className='card';box.innerHTML=`<span class="eyebrow">МОЙ ПЛАН</span><h2>${niEsc(p.plan_name||'Персональный план')}</h2>${p.trainer_comment?`<p class="muted">${niEsc(p.trainer_comment)}</p>`:''}
+  ${(p.days||[]).map((d,i)=>`<div class="detail-section"><h4>${niEsc(d.title||`День ${i+1}`)}</h4>${(d.exercises||[]).map((x,k)=>`<button type="button" class="ni-client-ex" data-di="${i}" data-ei="${k}" style="display:block;width:100%;text-align:left;padding:12px;margin:7px 0;border:1px solid #303036;border-radius:14px;background:#18181b;color:#f4f2ed"><b>${niEsc(x.name)}</b><br><small style="color:#999">${niEsc(x.sets)} подх. · ${niEsc(x.reps)} повт. · отдых ${niEsc(x.rest)}</small></button>`).join('')}</div>`).join('')}`;
+  box.querySelectorAll('.ni-client-ex').forEach(b=>b.onclick=()=>openNIExercise(p.days[+b.dataset.di].exercises[+b.dataset.ei]));
  }catch(e){}
 };
 setTimeout(loadPersonalTrainingPlan,1600);
@@ -562,9 +536,35 @@ async function loadReplacementRequests(){
 function renderTodayDashboard(){
  const label=$('#todayLabel');if(label)label.textContent=new Intl.DateTimeFormat('ru-RU',{weekday:'long',day:'numeric',month:'long'}).format(new Date());
  const p=plan();let done=p.filter((_,i)=>S.done[mkey(i)]).length;
- if($('#todayMealStat'))$('#todayMealStat').textContent=`${done}/${p.length}`;
- if($('#todayWaterStat'))$('#todayWaterStat').textContent=`${Number(S.water||0).toFixed(2).replace(/\.00$/,'')} л`;
- if($('#todayTrainingStat'))$('#todayTrainingStat').textContent=currentTariff().level>=2?'Открыть':'PRO';
+ const mealStat=$('#todayMealStat'), waterStat=$('#todayWaterStat'), trainStat=$('#todayTrainingStat');
+ if(mealStat)mealStat.textContent=`${done}/${p.length}`;
+ if(waterStat)waterStat.textContent=`${Number(S.water||0).toFixed(2).replace(/\.00$/,'')} л`;
+ if(trainStat){
+   const canOpen=currentTariff().level>=2 || !!S.hasTrainingPlan || S.server?.role==='admin';
+   trainStat.textContent=canOpen?'Открыть':'PRO';
+   const card=trainStat.closest('.today-card')||trainStat.parentElement;
+   if(card){
+     card.style.cursor='pointer';
+     card.onclick=()=>canOpen?go('exercises'):openUpgrade('training');
+   }
+ }
+
+ const checkStat=$('#todayCheckinStat');
+ if(checkStat){
+   const card=checkStat.closest('.today-card')||checkStat.parentElement;
+   if(card){
+     card.style.cursor='pointer';
+     card.onclick=()=>{
+       const weekly=$('#weeklyCheckinCard');
+       if(weekly){
+         go('profile');
+         setTimeout(()=>weekly.scrollIntoView({behavior:'smooth',block:'start'}),120);
+       }else{
+         go('profile');
+       }
+     };
+   }
+ }
 }
 async function loadWeeklyCheckins(){
  const el=$('#weeklyStatus');if(!el)return;try{const j=await apiPost('/api/monthly-review',{action:'weekly-list'});const last=(j.checkins||[])[0];
@@ -589,3 +589,36 @@ const demoBtn=$('#startDemoBtn');if(demoBtn)demoBtn.onclick=async()=>{
 };
 const _renderAllV2=renderAll;renderAll=function(){_renderAllV2();renderTodayDashboard();updateDemoBanner()};
 setTimeout(()=>{renderTodayDashboard();loadWeeklyCheckins();loadReplacementRequests();updateDemoBanner()},1800);
+
+/* ===== NI FITNESS · CLICKABLE TODAY CARDS FIX ===== */
+function bindTodayQuickCards(){
+  const dash=$('#todayDashboard'); if(!dash)return;
+  [...dash.querySelectorAll('*')].forEach(el=>{
+    const txt=(el.textContent||'').trim();
+    if(txt==='Открыть' || txt==='PRO'){
+      const card=el.closest('.today-card')||el.closest('.card')||el.parentElement;
+      if(card && /Тренировка/.test(card.textContent||'')){
+        card.style.cursor='pointer';
+        card.onclick=()=>{
+          const canOpen=currentTariff().level>=2 || !!S.hasTrainingPlan || S.server?.role==='admin';
+          if(canOpen)go('exercises'); else openUpgrade('training');
+        };
+      }
+    }
+    if(txt==='Неделя'){
+      const card=el.closest('.today-card')||el.closest('.card')||el.parentElement;
+      if(card && /Чек-ин/.test(card.textContent||'')){
+        card.style.cursor='pointer';
+        card.onclick=()=>{
+          go('profile');
+          setTimeout(()=>{
+            const weekly=$('#weeklyCheckinCard');
+            if(weekly)weekly.scrollIntoView({behavior:'smooth',block:'start'});
+          },120);
+        };
+      }
+    }
+  });
+}
+setTimeout(bindTodayQuickCards,2000);
+
