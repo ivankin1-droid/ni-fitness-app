@@ -17,7 +17,7 @@ const plan=()=>{const p=JSON.parse(JSON.stringify(D.plans[String(S.kcal)]||D.pla
 const mkey=i=>`${today()}_${S.kcal}_${i}`;
 function effectiveMeal(i){let m=plan()[i],rep=S.replacements[mkey(i)]||{};m.ingredients=m.ingredients.map((x,idx)=>rep[idx]?{...x,name:rep[idx]}:x);let factor=(S.portions[mkey(i)]||100)/100;m.effectiveKcal=Math.round(m.kcal*factor);m.effectiveProtein=Math.round(m.protein*factor*10)/10;m.effectiveGrams=Math.round(m.grams*factor);return m}
 
-function mealHTML(_,i){let m=effectiveMeal(i),done=!!S.done[mkey(i)],portion=S.portions[mkey(i)]||100;const visibleName=(m.ingredients||[]).slice(0,2).map(x=>x.name).filter(Boolean).join(' + ')||m.name;return `<div class="meal ${done?'done':''}"><div class="time">${m.time}</div><div><h3>${visibleName}</h3><p>${m.effectiveKcal} ккал · ${m.effectiveProtein} г белка · ${m.effectiveGrams} г</p><span class="portion-badge">съедено ${portion}%</span></div><div class="meal-actions"><button type="button" class="check" data-meal="${i}">${done?'✓':'○'}</button><button type="button" class="mini" data-editmeal="${i}">Количество</button></div></div>`}
+function mealHTML(_,i){let m=effectiveMeal(i),done=!!S.done[mkey(i)],portion=S.portions[mkey(i)]||100;return `<div class="meal ${done?'done':''}"><div class="time">${m.time}</div><div><h3>${m.name}</h3><p>${m.effectiveKcal} ккал · ${m.effectiveProtein} г белка · ${m.effectiveGrams} г</p><span class="portion-badge">съедено ${portion}%</span></div><div class="meal-actions"><button class="check" data-meal="${i}">${done?'✓':'○'}</button><button class="mini" data-editmeal="${i}">Количество</button></div></div>`}
 function renderMeals(){let p=plan(),html=p.map(mealHTML).join('');$('#homeMeals').innerHTML=html;$('#nutritionMeals').innerHTML=html;let eaten=0,protein=0,count=0;p.forEach((m,i)=>{if(S.done[mkey(i)]){let e=effectiveMeal(i);eaten+=e.effectiveKcal;protein+=e.effectiveProtein;count++}});$('#eatenKcal').textContent=Math.round(eaten);$('#eatenProtein').textContent=Math.round(protein)+' г';$('#mealProgress').textContent=count+'/'+p.length;$$('[data-meal]').forEach(b=>b.onclick=()=>{let k=mkey(+b.dataset.meal);S.done[k]=!S.done[k];save();renderAll()});$$('[data-editmeal]').forEach(b=>b.onclick=()=>openMeal(+b.dataset.editmeal))}
 function openMeal(i){let m=effectiveMeal(i),portion=S.portions[mkey(i)]||100;$('#mealDetail').innerHTML=`<span class="eyebrow">${m.time}</span><h2>${m.name}</h2><div class="ingredient-list">${m.ingredients.map((x,idx)=>`<div class="ingredient-row"><div><b>${x.name}</b><small>${x.grams} г по плану</small></div><button class="mini" data-replace="${i}:${idx}">Заменить</button></div>`).join('')}</div><div class="detail-section"><h4>Сколько фактически съедено?</h4><p>100% = вся запланированная порция (${m.grams} г). Можно указать меньше или больше.</p><div class="amount-line"><input id="portionInput" type="number" min="0" max="300" value="${portion}"><span>% порции</span><button class="primary" id="savePortion">Сохранить</button></div></div>`;$('#mealModal').classList.add('open');$('#savePortion').onclick=()=>{S.portions[mkey(i)]=Math.max(0,Math.min(300,+$('#portionInput').value||0));save();$('#mealModal').classList.remove('open');renderAll()};$$('[data-replace]').forEach(b=>b.onclick=()=>{let [mi,ii]=b.dataset.replace.split(':').map(Number);openReplace(mi,ii)})}
 function openReplace(mi,ii){let m=effectiveMeal(mi),ing=m.ingredients[ii],opts=D.replacements[ing.name]||['Рис готовый','Гречка готовая','Куриная грудка готовая','Индейка готовая','Треска/хек готовые','Йогурт греческий 2%','Ягоды'];$('#replaceDetail').innerHTML=`<div class="profile-summary">Сейчас: <b>${ing.name}</b> · ${ing.grams} г</div><div class="replace-options">${opts.filter(x=>x!==ing.name).map(x=>`<button data-choice="${x}">${x}</button>`).join('')}</div><div class="detail-section"><p>Замена меняет продукт внутри этого приёма пищи. Количество остаётся ориентировочно тем же; точную эквивалентность по калориям лучше проверять индивидуально.</p></div><button class="request-own" id="requestOwnFood">Не подходит? Запросить замену у Никиты</button>`;$('#replaceModal').classList.add('open');$$('[data-choice]').forEach(b=>b.onclick=()=>{let k=mkey(mi);S.replacements[k]=S.replacements[k]||{};S.replacements[k][ii]=b.dataset.choice;save();$('#replaceModal').classList.remove('open');$('#mealModal').classList.remove('open');renderAll()});const rb=$('#requestOwnFood');if(rb)rb.onclick=()=>openReplacementRequest('food',ing.name)}
@@ -250,7 +250,7 @@ function applyTariffAccess(){
 
   // Training page/nav/quick access remain visible but open an upgrade prompt on START.
   $$('[data-goto="exercises"]').forEach(btn=>{
-    if(tariff.level<2){
+    if(tariff.level<2 && !S.hasTrainingPlan){
       btn.onclick=(e)=>{e.preventDefault();openUpgrade('training')};
       btn.classList.add('tier-locked');
     }else{
@@ -506,12 +506,41 @@ function openNIExercise(x){
 loadPersonalTrainingPlan=async function(){
  try{
   const r=await fetch('/api/training-plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({initData:window.Telegram?.WebApp?.initData||''})});
-  if(!r.ok)return;const j=await r.json(),p=j.plan;if(!p)return;
+  if(!r.ok)return;
+  const j=await r.json(),p=j.plan;if(!p)return;
+
+  S.hasTrainingPlan=true;save();
+
+  // Если Никита назначил персональный план — раздел тренировок открываем
+  // даже на START, но только для этого клиента.
+  $$('[data-goto="exercises"]').forEach(btn=>{
+    btn.onclick=()=>go('exercises');
+    btn.classList.remove('tier-locked');
+  });
+
   const page=document.querySelector('[data-page="exercises"]');if(!page)return;
-  let box=document.querySelector('#personalTrainingPlan');if(!box){box=document.createElement('div');box.id='personalTrainingPlan';(page.querySelector('.page-title')||page).insertAdjacentElement('afterend',box)}
-  box.className='card';box.innerHTML=`<span class="eyebrow">МОЙ ПЛАН</span><h2>${niEsc(p.plan_name||'Персональный план')}</h2>${p.trainer_comment?`<p class="muted">${niEsc(p.trainer_comment)}</p>`:''}
-  ${(p.days||[]).map((d,i)=>`<div class="detail-section"><h4>${niEsc(d.title||`День ${i+1}`)}</h4>${(d.exercises||[]).map((x,k)=>`<button type="button" class="ni-client-ex" data-di="${i}" data-ei="${k}" style="display:block;width:100%;text-align:left;padding:12px;margin:7px 0;border:1px solid #303036;border-radius:14px;background:#18181b;color:#f4f2ed"><b>${niEsc(x.name)}</b><br><small style="color:#999">${niEsc(x.sets)} подх. · ${niEsc(x.reps)} повт. · отдых ${niEsc(x.rest)}</small></button>`).join('')}</div>`).join('')}`;
-  box.querySelectorAll('.ni-client-ex').forEach(b=>b.onclick=()=>openNIExercise(p.days[+b.dataset.di].exercises[+b.dataset.ei]));
+  let box=document.querySelector('#personalTrainingPlan');
+  if(!box){
+    box=document.createElement('div');
+    box.id='personalTrainingPlan';
+    (page.querySelector('.page-title')||page).insertAdjacentElement('afterend',box);
+  }
+
+  box.className='card';
+  box.innerHTML=`<span class="eyebrow">МОЙ ПЛАН</span>
+  <h2>${niEsc(p.plan_name||'Персональный план')}</h2>
+  ${p.trainer_comment?`<p class="muted">${niEsc(p.trainer_comment)}</p>`:''}
+  ${(p.days||[]).map((d,i)=>`<div class="detail-section">
+    <h4>${niEsc(d.title||`День ${i+1}`)}</h4>
+    ${(d.exercises||[]).map((x,k)=>`<button type="button" class="ni-client-ex" data-di="${i}" data-ei="${k}" style="display:block;width:100%;text-align:left;padding:12px;margin:7px 0;border:1px solid #303036;border-radius:14px;background:#18181b;color:#f4f2ed">
+      <b>${niEsc(x.name)}</b><br>
+      <small style="color:#999">${niEsc(x.sets)} подх. · ${niEsc(x.reps)} повт. · отдых ${niEsc(x.rest)}</small>
+    </button>`).join('')}
+  </div>`).join('')}`;
+
+  box.querySelectorAll('.ni-client-ex').forEach(b=>{
+    b.onclick=()=>openNIExercise(p.days[+b.dataset.di].exercises[+b.dataset.ei]);
+  });
  }catch(e){}
 };
 setTimeout(loadPersonalTrainingPlan,1600);
@@ -546,20 +575,10 @@ async function loadWeeklyCheckins(){
  el.innerHTML=`<div class="status-box"><b>Последний чек-ин: ${new Date(last.created_at).toLocaleDateString('ru-RU')}</b><small>${niEsc(last.status||'new')}</small>${last.trainer_reply?`<div class="trainer-feedback"><b>Ответ Никиты</b><p>${niEsc(last.trainer_reply)}</p></div>`:''}</div>`;
  }catch(e){el.textContent=''}
 }
-function openWeeklyCheckin(){
- const card=$('#weeklyCheckinCard');if(!card)return;
- go('profile');
- setTimeout(()=>{card.scrollIntoView({behavior:'smooth',block:'start'});const first=$('#weeklyWeight');if(first)first.focus({preventScroll:true})},120);
-}
-const todayDash=$('#todayDashboard');
-if(todayDash&&!$('#weeklyQuickBtn')){
- const q=document.createElement('button');q.type='button';q.id='weeklyQuickBtn';q.className='primary wide';q.style.marginTop='12px';q.textContent='Еженедельный чек-ин';
- q.onclick=openWeeklyCheckin;todayDash.insertAdjacentElement('afterend',q);
-}
-const weeklyBtn=$('#sendWeeklyCheckin');if(weeklyBtn){weeklyBtn.type='button';weeklyBtn.style.pointerEvents='auto';weeklyBtn.onclick=async()=>{
+const weeklyBtn=$('#sendWeeklyCheckin');if(weeklyBtn)weeklyBtn.onclick=async()=>{
  try{await apiPost('/api/monthly-review',{action:'weekly-submit',weight:$('#weeklyWeight').value,nutritionScore:$('#weeklyNutrition').value,trainingCount:$('#weeklyTraining').value,sleepScore:$('#weeklySleep').value,wellbeingScore:$('#weeklyWellbeing').value,win:$('#weeklyWin').value,hard:$('#weeklyHard').value,question:$('#weeklyQuestion').value});await loadWeeklyCheckins();alert('Недельный чек-ин отправлен Никите.');}
  catch(e){alert(e.message)}
-};}
+};
 function updateDemoBanner(){
  const b=$('#demoBanner');if(!b)return;if(!S.demo?.active||!S.demo.expiresAt){b.style.display='none';return}b.style.display='flex';
  const left=Math.max(0,new Date(S.demo.expiresAt).getTime()-Date.now());if(left<=0){S.demo.active=false;save();location.reload();return}
