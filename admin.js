@@ -56,10 +56,10 @@ async function openClient(id){
  ${['nutrition','products','protein','goals','labels'].map(x=>`<label class="switch-row"><span>${x}</span><input type="checkbox" data-mat="${x}" ${(c.allowed_materials||[]).includes(x)?'checked':''}></label>`).join('')}
  </div>
  <div class="detail-section admin-engagement"><h4>Запросы на замену</h4>
-   <div>${(engagement.replacements||[]).length?(engagement.replacements||[]).map(r=>`<div class="notice"><b>${r.request_type==='food'?'Продукт':'Упражнение'} · ${r.current_item||'—'}</b><br>${r.reason||''}${r.trainer_reply?`<div class="trainer-feedback"><b>Твой ответ</b><p>${r.trainer_reply}</p></div>`:`<textarea data-rep-feedback="${r.id}" placeholder="Ответ клиенту"></textarea><button class="wide admin-rep-reply" data-id="${r.id}">Ответить</button>`}</div>`).join(''):'<div class="notice">Запросов пока нет.</div>'}</div>
+   <div>${(engagement.replacements||[]).length?(engagement.replacements||[]).map(r=>`<div class="notice"><b>${r.request_type==='food'?'Продукт':'Упражнение'} · ${r.current_item||'—'}</b><br>${r.reason||''}${r.trainer_reply?`<div class="trainer-feedback"><b>Твой ответ</b><p>${r.trainer_reply}</p></div>`:`<textarea data-rep-feedback="${r.id}" placeholder="Ответ клиенту"></textarea><button class="wide admin-rep-reply" data-id="${r.id}">Ответить</button>`}<button type="button" class="wide admin-delete-replacement" data-id="${r.id}" style="margin-top:8px">Удалить запрос</button></div>`).join(''):'<div class="notice">Запросов пока нет.</div>'}</div>
  </div>
  <div class="detail-section admin-engagement"><h4>Еженедельные чек-ины</h4>
-   <div>${(engagement.checkins||[]).length?(engagement.checkins||[]).map(w=>`<div class="notice"><b>${w.created_at?new Date(w.created_at).toLocaleDateString('ru-RU'):'—'} · вес ${w.weight||'—'} кг</b><br>Питание ${w.nutrition_score||'—'}/10 · тренировок ${w.workouts_done||0} · сон ${w.sleep||'—'}/10 · самочувствие ${w.wellbeing||'—'}/10<br>${w.successes?`<br><b>Получилось:</b> ${w.successes}`:''}${w.difficulties?`<br><b>Сложности:</b> ${w.difficulties}`:''}${w.question?`<br><b>Вопрос:</b> ${w.question}`:''}${w.trainer_reply?`<div class="trainer-feedback"><b>Твой ответ</b><p>${w.trainer_reply}</p></div>`:`<textarea data-week-feedback="${w.id}" placeholder="Ответ клиенту"></textarea><button class="wide admin-week-reply" data-id="${w.id}">Ответить</button>`}</div>`).join(''):'<div class="notice">Чек-инов пока нет.</div>'}</div>
+   <div>${(engagement.checkins||[]).length?(engagement.checkins||[]).map(w=>`<div class="notice"><b>${w.created_at?new Date(w.created_at).toLocaleDateString('ru-RU'):'—'} · вес ${w.weight||'—'} кг</b><br>Питание ${w.nutrition_score||'—'}/10 · тренировок ${w.workouts_done||0} · сон ${w.sleep||'—'}/10 · самочувствие ${w.wellbeing||'—'}/10<br>${w.successes?`<br><b>Получилось:</b> ${w.successes}`:''}${w.difficulties?`<br><b>Сложности:</b> ${w.difficulties}`:''}${w.question?`<br><b>Вопрос:</b> ${w.question}`:''}${w.trainer_reply?`<div class="trainer-feedback"><b>Твой ответ</b><p>${w.trainer_reply}</p></div>`:`<textarea data-week-feedback="${w.id}" placeholder="Ответ клиенту"></textarea><button class="wide admin-week-reply" data-id="${w.id}">Ответить</button>`}<button type="button" class="wide admin-delete-weekly" data-id="${w.id}" style="margin-top:8px">Удалить чек-ин</button></div>`).join(''):'<div class="notice">Чек-инов пока нет.</div>'}</div>
  </div>
  <div class="detail-section"><h4>Корректировка питания</h4>
    <label>Новая калорийность<select id="adjustKcal">${[1200,1500,1800,2000,2200,2500,3000,3200,3500,4000].map(k=>`<option ${Number(c.assigned_kcal)===k?'selected':''}>${k}</option>`).join('')}</select></label>
@@ -83,6 +83,9 @@ async function openClient(id){
  $('#clientModal').classList.add('open');
  $$('.admin-rep-reply').forEach(b=>b.onclick=async()=>{const feedback=document.querySelector(`[data-rep-feedback="${b.dataset.id}"]`).value.trim();if(!feedback)return alert('Напиши ответ.');try{await post('/api/admin-review',{action:'replacement-response',id:b.dataset.id,feedback});await openClient(c.telegram_id)}catch(e){alert(e.message)}});
  $$('.admin-week-reply').forEach(b=>b.onclick=async()=>{const feedback=document.querySelector(`[data-week-feedback="${b.dataset.id}"]`).value.trim();if(!feedback)return alert('Напиши ответ.');try{await post('/api/admin-review',{action:'weekly-response',id:b.dataset.id,feedback});await openClient(c.telegram_id)}catch(e){alert(e.message)}});
+ $$('.admin-delete-replacement').forEach(b=>b.onclick=async()=>{if(!confirm('Удалить этот запрос на замену?'))return;try{await post('/api/admin-review',{action:'delete-replacement',id:b.dataset.id});await openClient(c.telegram_id)}catch(e){alert(e.message)}});
+ $$('.admin-delete-weekly').forEach(b=>b.onclick=async()=>{if(!confirm('Удалить этот еженедельный чек-ин?'))return;try{await post('/api/admin-review',{action:'delete-weekly',id:b.dataset.id});await openClient(c.telegram_id)}catch(e){alert(e.message)}});
+
 
 
  let trainingPlans=[];
@@ -95,7 +98,8 @@ async function openClient(id){
  $('#trainingComment').value=activePlan?.trainer_comment||'';
  $('#trainingDaysEditor').innerHTML=(activePlan?.days?.length?activePlan.days:[{title:'День 1',exercises:[]}]).map(trainingDayBlock).join('');
  bindTrainingDayRemove();
- $('#trainingHistory').innerHTML=trainingPlans.length?trainingPlans.map(p=>`<div class="notice"><b>${p.plan_name||'Тренировочный план'}</b><br><small>${new Date(p.created_at).toLocaleDateString('ru-RU')}</small><br>${p.trainer_comment||''}</div>`).join(''):'<div class="notice">Планов пока нет.</div>';
+ $('#trainingHistory').innerHTML=trainingPlans.length?trainingPlans.map(p=>`<div class="notice"><b>${p.plan_name||'Тренировочный план'}</b><br><small>${new Date(p.created_at).toLocaleDateString('ru-RU')}</small><br>${p.trainer_comment||''}<button type="button" class="wide admin-delete-training" data-id="${p.id}" style="margin-top:8px">Удалить план</button></div>`).join(''):'<div class="notice">Планов пока нет.</div>';
+  $$('.admin-delete-training').forEach(b=>b.onclick=async()=>{if(!confirm('Удалить этот тренировочный план?'))return;try{await post('/api/admin-training-plans',{telegramId:c.telegram_id,action:'delete',id:b.dataset.id});await openClient(c.telegram_id)}catch(e){alert(e.message)}});
  $('#addTrainingDay').onclick=()=>{$('#trainingDaysEditor').insertAdjacentHTML('beforeend',trainingDayBlock({title:`День ${$$('.training-day-edit').length+1}`,exercises:[]}));bindTrainingDayRemove()};
  $('#saveTrainingPlan').onclick=async()=>{
    const planName=$('#trainingPlanName').value.trim();
@@ -178,7 +182,7 @@ function openReview(id){
  <div class="detail-section"><h4>Что было сложно</h4><p>${r.hard||'—'}</p></div>
  <div class="detail-section"><h4>Что хочет изменить</h4><p>${r.next||'—'}</p></div>
  <label>Ответ Никиты<textarea id="trainerFeedback" placeholder="Итог, главная корректировка и фокус следующего месяца"></textarea></label>
- <button class="primary wide" id="sendTrainerFeedback">Отправить разбор</button>`;
+ <button class="primary wide" id="sendTrainerFeedback">Отправить разбор</button><button type="button" class="wide" id="deleteMonthlyReview" style="margin-top:8px">Удалить отчёт</button>`;
  $('#adminReviewModal').classList.add('open');
  $('#sendTrainerFeedback').onclick=async()=>{try{
   await post('/api/admin-review',{id:r.id,feedback:$('#trainerFeedback').value.trim()});
