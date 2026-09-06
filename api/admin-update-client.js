@@ -12,6 +12,14 @@ module.exports = async function handler(req, res) {
 
     const patch = { updated_at: new Date().toISOString() };
 
+    if (req.body.tariffCode !== undefined) {
+      const tariffCode = Number(req.body.tariffCode);
+      if (![690, 1490, 2990].includes(tariffCode)) {
+        return json(res, 400, { error: 'Неизвестный тариф.' });
+      }
+      patch.tariff_code = tariffCode;
+    }
+
     if (req.body.assignedKcal !== undefined) {
       patch.assigned_kcal = Number(req.body.assignedKcal);
     }
