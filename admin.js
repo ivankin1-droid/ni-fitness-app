@@ -290,3 +290,15 @@ readTrainingDays=function(){
   return {title,exercises:[...visual,...manual]};
  });
 };
+
+/* ===== ADMIN TABS DELEGATED FIX ===== */
+document.addEventListener('click',e=>{
+  const btn=e.target.closest('.admin-tab');
+  if(!btn)return;
+  const root=document.querySelector('#clientDetail');
+  if(!root || !root.contains(btn))return;
+  const tab=btn.dataset.tab;
+  root.querySelectorAll('.admin-tab').forEach(x=>x.classList.toggle('active',x===btn));
+  root.querySelectorAll('.admin-tab-panel').forEach(p=>p.classList.toggle('active',p.dataset.panel===tab));
+});
+
